@@ -1,0 +1,23 @@
+name: Deploy gh-pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ljharb/actions/node/install@main
+      name: 'nvm install lts/* && npm install'
+      with:
+        node-version: lts/*
+    - run: npm run build
+    - uses: JamesIves/github-pages-deploy-action@v4.3.3
+      with:
+        branch: gh-pages
+        folder: build
+        clean: true

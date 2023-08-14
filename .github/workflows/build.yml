@@ -1,0 +1,15 @@
+name: Build spec
+
+on: [pull_request, push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ljharb/actions/node/install@main
+      name: 'nvm install lts/* && npm install'
+      with:
+        node-version: lts/*
+    - run: npm run build
