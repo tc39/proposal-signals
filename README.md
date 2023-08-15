@@ -8,7 +8,13 @@
 
 ## Motivation
 
-*Why is this important to have in the JavaScript language?*
+Web Developers and UI Engineers continue to push the limits of browser-based experiences. Over the last decade in particular, the size and complexity of stateful web clients has grown considerably, surfacing new challenges for even the most experienced engineering teams. Among these challenges is the need to store, compute, invalidate, sync, and push state to the application's view layer in an efficient way. To further complicate matters, the typical UI involves more than just managing simple values, but often involves rendering computed state which is dependent on a complex dependency tree of other values or computed state.
+
+To address these challenges, innovative members of our web community have explored various primitives and state management approaches over the years. One particular primitive seems to have persisted over the longhaul: *signal*.
+
+The *signal* primitive has gone by many names, but seems to have made its first popular appearance on the Web with Knockout, ca. 2010. In the years since, many variations and implementations have been created. Within the last three years, the signal primitive and related approaches has gained further traction, with nearly every modern JavaScript library or framework having something similar, under one name or another.
+
+Through this decade plus exploration of signals in web development, our community has learned much. But we have reached a point where userland libraries cannot enable us to deliver the high-performance, memory-efficient, and interoperable solutions we need. As a result, we propose adding a new *signal* primitive to the JavaScript language.
 
 ## Use cases
 
