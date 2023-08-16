@@ -1,11 +1,5 @@
 # Signals
 
-## Status
-
-* **Champion(s):** TBD
-* **Author(s):** Rob Eisenberg
-* **Stage**: 0
-
 ## Motivation
 
 Web Developers and UI Engineers continue to push the limits of browser-based experiences. Over the last decade in particular, the size and complexity of stateful web clients has grown considerably, surfacing new challenges for even the most experienced engineering teams. Among these challenges is the need to store, compute, invalidate, sync, and push state to the application's view layer in an efficient way. To further complicate matters, the typical UI involves more than just managing simple values, but often involves rendering computed state which is dependent on a complex tree of other values or state that is also computed itself.
@@ -65,18 +59,19 @@ To understand signals, let's take a look at the above example, re-imagined with 
 #### Example - A Signals Counter
 
 ```js
-const counter = signal(0);
-const isEven = signal(() => (counter.value & 1) == 0);
-const parity = signal(() => isEven.value ? "even" : "odd");
-const render = signal(() => element.innerText = parity.value, { scheduler: rAFBatcher });
+const [counter, setCounter] = Signal.cell(0);
+const isEven = Signal.computed(() => (counter.value & 1) == 0);
+const parity = Signal.computed(() => isEven.value ? "even" : "odd");
+
+Signal.effect(() => element.innerText = parity.value, { scheduler: rAFBatcher });
 
 // Simulate external updates to counter...
-setInterval(() => counter.value++, 1000);
+setInterval(() => setCounter(counter.value + 1), 1000);
 ```
 
 There are a few things we can see right away:
 * We've eliminated the noisy boilerplate around the `counter` variable from our previous example.
-* There is a singular, unified way to handle values, computations, and side effects.
+* There is a unified API gateway to handle values, computations, and side effects.
 * There's no circular reference problem or upside down dependencies between `counter` and `render`.
 * There are no manual subscriptions, nor is there any need for bookkeeping.
 * There is a means of controlling side-effect timing/scheduling.
@@ -99,21 +94,9 @@ Below are a few thoughts on the potential benefits of signals as a built-in.
 
 Models, components, and libraries built with one signal implementation don't work well with those built with another, nor do they work with view engines or component systems which typically only recognize their own primitives. This makes it impossible to build shareable reactive models and libraries within the community or even within companies. Furthermore, due to the typical strong coupling between a view engine and its reactivity implementation, developers cannot easily migrate to new rendering technologies without also completely re-writing their non-UI code to a new reactivity system. With a platform built-in, a large amount of code could be made interoperable and significantly more portable.
 
-#### Memory Efficiency
+#### Performance/Memory usage
 
-UI scenarios present a number of memory-related challenges: 
-
-  * Memory pressure during application startup can significantly build up, typically as a result of creating many signals during creation of the initial UI. Library authors try to offset this by using various techniques including, pre-allocating arrays, sharing objects, and using custom data structures that avoid `Array#push` operations. With a native implementation we would like to explore whether this could be handled more efficiently.
-  * Preventing memory leaks caused by reference/lifetime complexities within the internal dependency graph of signals is a challenge. While the memory leak issues can be solved through explicit teardown or internal use of weak refs/maps, these solutions tend to have a negative impact on performance. We think it would be interesting to explore whether a native implementation that integrates with the GC could improve this.
-
-#### Performance
-
-There would be at least one solid performance win with a built-in signal type because the amount of code required to implement a fully-featured signal library that handles all edge cases is non-trivial. Having a built-in would reduce both bundle size and JS parse time, critical to the initial render performance of a page.
-
-There are a couple of other areas of performance that may be improvable with a native implementation. We'd love to explore these when the time is right:
-
-  * At startup, an application typically needs to create many signals at once in order to render the initial view. Could native implementations improve the efficiency of creation over JS implementations?
-  * Signals need to efficiently traverse their dependency graph to invalidate portions of the graph when dependencies change. Could a native implementation of the algorithm improve paint/update performance in real world scenarios?
+We hope that some JS engines may implement the various operations of graph construction and traversal more efficiently, by eliminating certain overhead related to code loading and the generality of JS data structures. However, no algorithmic changes are anticipated vs. what would be present in a polyfill; engines are not expected to be magic here, and the reactivity algorithms will be well-defined and unambiguous.
 
 #### Asynchrony
 
@@ -131,7 +114,7 @@ While beyond the scope of TC39 work, the opportunity for consistent tooling is s
 
 ## Use cases
 
-*TODO: Some additional scenarios using signals, with both code and description.*
+*TODO: Some additional scenarios using signals, with both code and description. We need exmaples that are more comlex than the counter example above.*
 
 ## Comparison
 
