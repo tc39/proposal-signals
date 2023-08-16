@@ -10,38 +10,114 @@
 
 Web Developers and UI Engineers continue to push the limits of browser-based experiences. Over the last decade in particular, the size and complexity of stateful web clients has grown considerably, surfacing new challenges for even the most experienced engineering teams. Among these challenges is the need to store, compute, invalidate, sync, and push state to the application's view layer in an efficient way. To further complicate matters, the typical UI involves more than just managing simple values, but often involves rendering computed state which is dependent on a complex tree of other values or state that is also computed itself.
 
+Let's take a look at a small-scale example that will help us see a few of the challenges.
+
+#### Example - A VanillaJS Counter
+
+Given a variable, `counter`, you want to render into the DOM whether the counter is even or odd. Whenever the `counter` changes, you want to update the DOM with the latest parity. In Vanilla JS, you might have something like this:
+
+```js
+let counter = 0;
+const getCounter = () => counter;
+const setCounter = (value) => {
+  counter = value;
+  render();
+};
+
+const isEven = () => (getCounter() & 1) == 0;
+const parity = () => isEven() ? "even" : "odd";
+const render = () => element.innerText = parity();
+
+// Simulate external updates to counter...
+setInterval(() => setCounter(getCounter() + 1), 1000);
+```
+
+This has a number of problems...
+
+* The `counter` setup is noisy and boilerplate-heavy.
+* The `counter` state is tightly coupled to the rendering system.
+* There is a transitive circular reference between `setCounter()` and `render()`.
+* If the `counter` changes but `parity` does not (e.g. counter goes from 2 to 4), then we do unnecessary computation of the parity and unnecessary rendering.
+* What if another part of our UI just wants to render when the `counter` updates?
+* What if another part of our UI is dependent on `isEven` or `parity` alone?
+
+Even in this relatively simple scenario, a number of issues arise quickly. We could try to work around these by introducing pub/sub for the `counter`. This would make the following improvements:
+
+* Rendering would now be decoupled from the `counter` and the circular reference would be gone.
+* Additional consumers of the `counter` could subscribe to add their own reactions to state changes.
+
+However, we're still stuck with the following problems:
+
+* The render function, which is only dependent on `parity` must instead "know" that it actually needs to subscribe to `counter`.
+* It isn't possible to update UI based on either `isEven` or `parity` alone, without directly interacting with `counter`.
+* We've increased our boilerplate.
+
+Now, we could solve a couple issues by adding pub/sub not just to `counter` but also to `isEven` and `parity`. We would then have to subscribe `isEven` to `counter`,  `parity` to `isEven`, and `render` to `parity`. Unfortunately, not only has our boilerplate code exploded, but we're stuck with a ton of bookeeping of subscriptions, and a potential memory leak disaster if we don't properly clean everything up in the right way. So, we've solved some issues but created a whole new category of problems and a lot of code. To make matters worse, we have to go through this entire process for every piece of state in our system.
+
+### Introducing Signals
+
 To address these challenges, innovative members of our web community have explored various primitives and state management approaches over the years. One particular primitive seems to have persisted over the long haul: *signal*.
 
-The *signal* primitive has gone by many names, but seems to have made its first popular appearance on the Web with [Knockout](https://knockoutjs.com/) [in 2010](https://blog.stevensanderson.com/2010/07/05/introducing-knockout-a-ui-library-for-javascript/). In the years since, many variations and implementations have been created. Within the last 3-4 years, the signal primitive and related approaches has gained further traction, with nearly every modern JavaScript library or framework having something similar, under one name or another.
+The *signal* primitive has gone by many names, but seems to have made its first popular appearance on the Web with [Knockout](https://knockoutjs.com/) [in 2010](https://blog.stevensanderson.com/2010/07/05/introducing-knockout-a-ui-library-for-javascript/). In the years since, many variations and implementations have been created. Within the last 3-4 years, the signal primitive and related approaches have gained further traction, with nearly every modern JavaScript library or framework having something similar, under one name or another.
 
-Through this decade plus exploration of signals in web development, our community has learned much. But we have reached a point where our userland libraries cannot go much further. To enable us to deliver the solutions we need, we propose adding a new *signal* primitive to JavaScript.
+To understand signals, let's take a look at the above example, re-imagined with a _**ficticious**_ signal library.
 
-### Current Challenges and Opportunities
+#### Example - A Signals Counter
 
-With a platform primitive, several long-standing issues could be solved:
+```js
+const counter = signal(0);
+const isEven = signal(() => (counter.value & 1) == 0);
+const parity = signal(() => isEven.value ? "even" : "odd");
+const render = signal(() => element.innerText = parity.value, { scheduler: rAFBatcher });
+
+// Simulate external updates to counter...
+setInterval(() => counter.value++, 1000);
+```
+
+There are a few things we can see right away:
+* We've eliminated the noisy boilerplate around the `counter` variable from our previous example.
+* There is a singular, unified way to handle values, computations, and side effects.
+* There's no circular reference problem or upside down dependencies between `counter` and `render`.
+* There are no manual subscriptions, nor is there any need for bookkeeping.
+* There is a means of controlling side-effect timing/scheduling.
+
+Signals give us much more than what can be seen on the surface of the API though:
+
+* **Automatic Dependency Tracking** - A computed signal automatically discovers any other signals that it is dependent on, whether those signals be simple values or other computations.
+* **Lazy Evaluation** - Computations are not eagerly evaluated when they are declared, nor are they immediately evaluated when their dependencies change. They are only evaluated when their value is explicity requested.
+* **Memoization** - Computed signals cache their last value so that computations that don't have changes in their dependencies do not need to be re-evalulated, no matter how many times they are called.
+
+### Potential Opportunities
+
+In the 13 years since Knockout, the Web community has explored signals in a variety of contexts, and has learned much. The pattern, while not ubiquitous, is more common than not in modern Web codebases. As a result of it prevalence and its benefits, we would like to explore adding a new *signal* primitive to JavaScript.
+
+With a platform primitive, not only is there an out-of-the-box mechanism to help with the overwhelimingly common scnenarios describe above, but it may be possible to make a number of technical improvements as well.
+
+Below are a few thoughts on the potential benefits of signals as a built-in.
 
 #### Interoperability
 
-Models, components, and libraries built with one signal implementation don't work well with those built with another, nor do they work with view engines or component systems which typically only recognize their own primitives. This makes it impossible to build shareable reactive models and libraries within the community or even within companies. Furthermore, due to the typical strong coupling between a view engine and its reactivity implementation, developers cannot easily migrate to new rendering technologies without also completely re-writing their non-UI code to a new reactivity system.
+Models, components, and libraries built with one signal implementation don't work well with those built with another, nor do they work with view engines or component systems which typically only recognize their own primitives. This makes it impossible to build shareable reactive models and libraries within the community or even within companies. Furthermore, due to the typical strong coupling between a view engine and its reactivity implementation, developers cannot easily migrate to new rendering technologies without also completely re-writing their non-UI code to a new reactivity system. With a platform built-in, a large amount of code could be made interoperable and significantly more portable.
 
 #### Memory Efficiency
 
-UI scenarios present a number of memory-related challenges for reactivity implementations: 
+UI scenarios present a number of memory-related challenges: 
 
-  * Memory pressure during application startup can be greatly increased, typically the result of creating many signals during creation of the iniutial UI. Library authors try to offset this by using various techniques including, pre-allocating arrays, sharing objects, and using custom data structures that avoid `Array#push` operations. But a native implementation could handle this much more efficiently.
-  * The possibility of memory leaks caused by reference and lifetime complexities within the dependency graph is a real challenge. While the memory leak issues can be solved through explicit teardown or internal use of weak refs/maps, these solutions tend to have a negative impact on performance. However, a native implementation that integrates with the GC may be able to address this.
+  * Memory pressure during application startup can significantly build up, typically as a result of creating many signals during creation of the initial UI. Library authors try to offset this by using various techniques including, pre-allocating arrays, sharing objects, and using custom data structures that avoid `Array#push` operations. With a native implementation we would like to explore whether this could be handled more efficiently.
+  * Preventing memory leaks caused by reference/lifetime complexities within the internal dependency graph of signals is a challenge. While the memory leak issues can be solved through explicit teardown or internal use of weak refs/maps, these solutions tend to have a negative impact on performance. We think it would be interesting to explore whether a native implementation that integrates with the GC could improve this.
 
 #### Performance
 
-Signals affect many aspects of performance:
+There would be at least one solid performance win with a built-in signal type because the amount of code required to implement a fully-featured signal library that handles all edge cases is non-trivial. Having a built-in would reduce both bundle size and JS parse time, critical to the initial render performance of a page.
 
-  * The amount of code required to implement a fully-featured signal library that handles all edge cases is non-trivial. Having a built-in would reduce both bundle size and JS parse time, critical to the initial render performance of a page.
-  * At startup, an application typically needs to create many signals at once in order to render the initial view. Native implementations could dramitcally improve the efficiency of creation over JS implementations.
-  * Signals need to efficiently traverse their dependency graph to invalidate portions of the graph when dependencies change. A native implementation of the algorithm could improve paint/update performance in real world scenarios.
+There are a couple of other areas of performance that may be improvable with a native implementation. We'd love to explore these when the time is right:
+
+  * At startup, an application typically needs to create many signals at once in order to render the initial view. Could native implementations improve the efficiency of creation over JS implementations?
+  * Signals need to efficiently traverse their dependency graph to invalidate portions of the graph when dependencies change. Could a native implementation of the algorithm improve paint/update performance in real world scenarios?
 
 #### Asynchrony
 
-Modern applications are highly asynchronous. Current implementations of signals in userland aren't always able to account for this at all or in a performant way in their computed state tracking. By integrating a native signal implementation with the upcoming `AsyncContext` infrastructure, it may be possible to enable a more efficient and ergonomic solution.
+Modern applications are highly asynchronous. Current implementations of signals in userland aren't always able to account for this at all or in a performant way in their computed state tracking. We think there's an opportunity to explore integrating a native signal with the upcoming `AsyncContext` infrastructure. This could not only improve ergonomics, but empower the average developer to succeed at more complex problems without falling into the traps of asynchrony.
 
 #### HTML/DOM Integration
 
@@ -55,26 +131,12 @@ While beyond the scope of TC39 work, the opportunity for consistent tooling is s
 
 ## Use cases
 
-*Some realistic scenarios using the feature, with both code and description of the problem; more than one can be helpful.*
-
-## Description
-
-*Developer-friendly documentation for how to use the feature.*
+*TODO: Some additional scenarios using signals, with both code and description.*
 
 ## Comparison
 
-*A comparison across various related programming languages and/or libraries. If this is the first sort of language or library to do this thing, explain why that is the case. If this is a standard library feature, a comparison across the JavaScript ecosystem would be good; if it's a syntax feature, that might not be practical, and comparisons may be limited to other programming languages.*
-
-## Implementations
-
-### Polyfill/transpiler implementations
-
-*A JavaScript implementation of the proposal, ideally packaged in a way that enables easy, realistic experimentation. See [implement.md](https://github.com/tc39/how-we-work/blob/master/implement.md) for details on creating useful prototype implementations.*
-
-### Native implementations
-
-*For Stage 3+ proposals, and occasionally earlier, it is helpful to link to the implementation status of full, end-to-end JavaScript engines. Filing these issues before Stage 3 is somewhat unnecessary, though, as it's not very actionable.*
+*TODO: A comparison across various libraries. This should include both signal and non-signal approaches.*
 
 ## FAQ
 
-*Frequently asked questions, or questions you think might be asked. Issues on the issue tracker or questions from past reviews can be a good source for these.*
+*TODO: Frequently asked questions, or questions you think might be asked. Issues on the issue tracker or questions from past reviews can be a good source for these.*
