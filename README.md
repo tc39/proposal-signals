@@ -348,7 +348,7 @@ The collaborators on the signal proposal want to be especially conservative in h
 
 **Q**: Isn't this proposal biased against React? It doesn't use signals, and it's the most popular framework.
 
-**A**: React's execution model keeps evolving, but we are unaware of any plans for React to use signals. Still, Preact Signals have demonstrated that React's performance can benefit from signals, and thar integration is possible.
+**A**: React's execution model keeps evolving, but we are unaware of any plans for React to use signals. Still, Preact Signals have demonstrated that React's performance can benefit from signals, and that integration is possible.
 
 **Q**: There's some pretty cool compiler work going on in reactivity, e.g., Marko, React Forget. Isn't it ineffcient to force runtimes to constantly rediscover dependencies, rather than have them be statically discovered with a smart complier?
 
