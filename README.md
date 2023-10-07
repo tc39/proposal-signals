@@ -1,14 +1,12 @@
-# JavaScript Signals standard proposal
+# Standard JavaScript Signals proposal
 
-This document outlines the goals of a standard signal proposal and a minimal API, with the intention of bringing signals as a TC39 proposal in the future.
+This document outlines the goals of a standard JavaScript signal proposal and a minimal API, with the intention of bringing signals as a TC39 proposal in the future. The effort here is driven by authors and maintainers of related frameworks and libraries in JavaScript, with a focus on developing signficant experience using shared JavaScript libraries to refine the proposal prior to standardization.
 
-# Signals
+## Background: Why signals?
 
-## Motivation
+To develop a complicated user interface (UI), JavaScript application developers need to store, compute, invalidate, sync, and push state to the application's view layer in an efficient way. UIs commonly involve more than just managing simple values, but often involves rendering computed state which is dependent on a complex tree of other values or state that is also computed itself. The goal of signals is to provide infrastructure for managing such application state so developers can focus on business logic rather than these repetitive details.
 
-To develop a complicated UI, JavaScript application developers need to store, compute, invalidate, sync, and push state to the application's view layer in an efficient way. To further complicate matters, the typical UI involves more than just managing simple values, but often involves rendering computed state which is dependent on a complex tree of other values or state that is also computed itself. The goal of signals is to provide infrastructure for managing such application state so developers can focus on business logic rather than these repetitive details.
-
-Let's take a look at a small-scale example that will help us see a few of the challenges.
+Signal-like constructs have independently been found to be useful in non-UI contexts as well, particularly in build systems to avoid unnecessary rebuilds.
 
 #### Example - A VanillaJS Counter
 
@@ -54,7 +52,6 @@ Now, we could solve a couple issues by adding pub/sub not just to `counter` but 
 ### Introducing Signals
 
 Data binding abstractions in UIs the model and view have long been core to UI frameworks across multiple programming languages, despite the absence of any such mechanism built into JS or the web platform. Within JS frameworks and libraries, there has been a large amount of experimentation across different ways to represent this binding, and experience has shown the power of one-way data flow in conjunction with a first-class data type representing a cell of state or computation derived from other data, now often called "signals".
-
 This first-class reactive value approach seems to have made its first popular appearance in open-source JavaScript web frameworks with [Knockout](https://knockoutjs.com/) [in 2010](https://blog.stevensanderson.com/2010/07/05/introducing-knockout-a-ui-library-for-javascript/). In the years since, many variations and implementations have been created. Within the last 3-4 years, the signal primitive and related approaches have gained further traction, with nearly every modern JavaScript library or framework having something similar, under one name or another.
 
 To understand signals, let's take a look at the above example, re-imagined with a signal API further articulated below.
@@ -63,16 +60,16 @@ To understand signals, let's take a look at the above example, re-imagined with 
 
 ```js
 const counter = new Signal.State(0);
-const isEven = new Signal.Computed(() => (counter() & 1) == 0);
-const parity = new Signal.Computed(() => isEven() ? "even" : "odd");
+const isEven = new Signal.Computed(() => (counter.get() & 1) == 0);
+const parity = new Signal.Computed(() => isEven.get() ? "even" : "odd");
 
 // A library or framework defines effects based on other signal primitives
 declare function effect(cb: () => void): (() => void);
 
-effect(() => element.innerText = parity());
+effect(() => element.innerText = parity.get());
 
 // Simulate external updates to counter...
-setInterval(() => counter.set(counter() + 1), 1000);
+setInterval(() => counter.set(counter.get() + 1), 1000);
 ```
 
 There are a few things we can see right away:
@@ -88,17 +85,19 @@ Signals give us much more than what can be seen on the surface of the API though
 * **Lazy Evaluation** - Computations are not eagerly evaluated when they are declared, nor are they immediately evaluated when their dependencies change. They are only evaluated when their value is explicity requested.
 * **Memoization** - Computed signals cache their last value so that computations that don't have changes in their dependencies do not need to be re-evalulated, no matter how many times they are accessed.
 
-### Benefits of standard signals
+## Motivation for standardizing signals
 
-At this point, we have 13 years of experience across JavaScript UI frameworks with signals in one guise or another, and this has led almost all frameworks to move towards a model based on signals for their reactivity.  As a result of it prevalence and its benefits, we would like to explore adding a new *signal* primitive to JavaScript.
+Given extensive experience with signals as a broadly useful construct, we propose to add a built-in signal construct to JavaScript.
 
-With a platform primitive, not only is there an out-of-the-box mechanism to help with the overwhelimingly common scnenarios describe above, but it may be possible to make a number of technical improvements as well:
+In general, JavaScript has had a fairly minimal standard library, but a trend in TC39 has been to make JS more of a "batteries-included" language, with a high-quality, built-in set of functionality available. For example, Temporal is replacing moment.js, and a number of small features, e.g., `Array.prototype.flat` and `Object.group` are replacing many lodash use cases. Benefits include smaller bundle sizes, improved stability and quality, less to learn when joining a new project, and a generally common vocabulary across JS developers.
+
+Apart from making signals available out-of-the-box with the generic benefits that brings, we see the following technical benefits:
 
 #### Interoperability
 
-Models, components, and libraries built with one signal implementation don't work well with those built with another, nor do they work with view engines or component systems which typically only recognize their own primitives. This makes it impossible to build shareable reactive models and libraries within the community or even within companies. Furthermore, due to the typical strong coupling between a view engine and its reactivity implementation, developers cannot easily migrate to new rendering technologies without also completely re-writing their non-UI code to a new reactivity system. With a platform built-in, a large amount of code could be made interoperable and significantly more portable.
+Each signal implementation has its own auto-tracking mechanism, to keep track of the sources encountered when evaluating a computed signal. This makes it hard to share models, components and libraries between different frameworks--they tend to come with a false coupling to their view engine (given that signals are usually implemented as part of JS frameworks).
 
-For example, a common signal type could be used to implement nested reactive objects, or other reactive data structures, in a way that would work across different frameworks. In general, the hope is that the model can be developed independently of the view. Unfortunately, due to versioning and duplication, it has turned out to be impractical to reach a strong level of sharing via JS-level libraries--built-ins offer a stronger sharing guarantee.
+A goal of this proposal is to fully decouple the reactive model from the rendering view, enabling developers to migrate to new rendering technologies without rewriting their non-UI code, or develop shared reactive models in JS to be deployed in different contexts. Unfortunately, due to versioning and duplication, it has turned out to be impractical to reach a strong level of sharing via JS-level libraries--built-ins offer a stronger sharing guarantee.
 
 #### Performance/Memory usage
 
@@ -106,7 +105,7 @@ It is always a small potential performance boost to ship less code due to common
 
 We suspect that native C++ implementations of signal-related datastructures and algorithms can be slightly more efficient than what is achievable in JS, by a constant factor. However, no algorithmic changes are anticipated vs. what would be present in a polyfill; engines are not expected to be magic here, and the reactivity algorithms themselves will be well-defined and unambiguous.
 
-Many signal implementations require computed signals which are not in use anymore to be manually disposed, as opposed to garbage-collected. Enabling GC of computed signals implemented in JavaScript has a performance cost. In the context of the implementation of standard signals, we want to investigate whether this cost can be reduced.
+Many signal implementations require computed signals which are not in use anymore to be manually disposed, as the rest of the signal graph ends up holding them alive. Using WeakRef/FinalizationRegistry to enable automatic garbage collection of computed signals has a performance cost. In the context of the implementation of built-in  signals, we plan to investigate whether this cost can be reduced.
 
 The champion group expects to develop various implementations of signals, and use these to investigate these performance possibilities.
 
@@ -126,9 +125,11 @@ Current work in W3C and by browser implementors is seeking to bring native templ
 
 ## Design goals for Signals
 
+It turns out that existing signal libraries are not all that different from each other, at their core. This proposal aims to build on their success by implmeneting the important qualities of many of those libraries.
+
 ### Core features
 
-* A signal type which represents state, or writable. This is a value that others can read.
+* A signal type which represents state, i.e. writable signal. This is a value that others can read.
 * A computed/memo/derived signal type, which depends on others and is lazily calculated and cached.
     * Computation is lazy, meaning computed signals aren't calculated again by default when one of their dependencies changes, but rather only run if someone actually reads them.
     * Computation is "glitch-free", meaning no unnecessary calculations are ever performed. This implies that, when an application reads a computed signal, there is a topological sorting of the potentially dirty parts of the graph to run, to eliminate any duplicates.
@@ -169,11 +170,11 @@ Current work in W3C and by browser implementors is seeking to bring native templ
         * However, important to not literally shadow the exact same names!
     * Tension between "usability by JS devs" and "providing all the hooks to frameworks"
         * Idea: Provide all the hooks, but name them such that it's more clear that they aren't for ordinary JS programmers, and include errors when misused if possible.
-        * TODO: `notify`/`start`/`stop` are "sound" but also expert features that should typically only be used by frameworks, so they should have names which discourage their use.
+        * TODO: Are `effect`/`startEffects`/`stopEffects` appropriate names?
 
 ### Memory management
 
-* If possible: A computed signal should be GC-able if nothing is referencing it for possible future reads, even if it's linked into a broader graph which stays alive.
+* If possible: A computed signal should be garbage-collectable if nothing live is referencing it for possible future reads, even if it's linked into a broader graph which stays alive (e.g., by reading a state which remains live).
     * Note that most frameworks today require explicit disposal of computed signals if they have any reference to or from another signal graph which remains alive.
     * This ends up not being so bad when their lifetime is tied to the lifetime of a UI component, and effects need to be disposed of anyway.
     * If it is too expensive to execute with these semantics, then we should add explicit disposal (or "unlinking") of computed signals to the API below, which currently lacks it.
@@ -181,6 +182,7 @@ Current work in W3C and by browser implementors is seeking to bring native templ
     * to make a writable signal (avoid two separate closures + array)
     * to implement effects (avoid a closure for every single reaction)
     * In the API for observing signal changes, avoid creating additional temporary data structures
+    * Solution: Class-based API enabling reuse of methods and fields defined in subclasses
 
 ## API sketch
 
@@ -189,8 +191,8 @@ An initial idea of a signal API is below. Note that this is just an early draft,
 ```ts
 // A cell of data which may change over time
 class Signal<T> {
-    // Get the value of the signal by calling it.
-    (): T;
+    // Get the value of the signal
+    get(): T;
 }
 
 namespace Signal {
@@ -208,10 +210,11 @@ namespace Signal {
         // Create a signal which evaluates to the value of cb.call(the signal)
         constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
 
-        // For effects: Subscribe or unsubscribe to callbacks on options.notify
-        // when the signal may potentially change when re-read
-        start();
-        stop();
+        // Subscribe to options.effect for when a (recursive) source changes
+        startEffects();
+
+        // Unsubscribe to options.effect
+        stopEffects();
     }
 
     namespace unsafe {
@@ -223,16 +226,15 @@ namespace Signal {
 type SignalComparison<T> = (this: Signal<T>, t: T, t2: T) => boolean;
 
 interface SignalOptions<T> {
-    // After setting/recomputing a signal, the equals function is called
-    // to understand if a significant change was made. Default: Object.is.
+    // Custom comparison function between old and new value. Default: Object.is.
     equals?: SignalComparison<T>;
 }
 
-type SignalNotify<T> = (this: Signal<T>) => void;
+type SignalEffect<T> = (this: Signal<T>) => void;
 
 interface ComputedOptions<T> extends SignalOptions<T> {
-    // For effects: call when this signal might return something new if read
-    notify?: SignalNotify<T>;
+    // For effects: call synchronously when a (recursive) source changes
+    effect?: SignalEffect<T>;
 }
 ```
 
@@ -253,7 +255,7 @@ Computed signals track their dependencies dynamically--each time they are run, t
 Unlike JavaScript Promises, everything in signals runs synchronously:
 - Setting a signal to a new value is synchronous, and this is immediately reflected when reading any computed signal which depends on it afterwards. There is no built-in batching of this mutation.
 - Reading computed signals is synchronous--their value is always available.
-- The `notify` callback, used to implement effects, as explained below, runs synchronously, during the `.set()` call which triggered it (but after graph coloring has completed).
+- The `effect` callback, used to implement effects, as explained below, runs synchronously, during the `.set()` call which triggered it (but after graph coloring has completed).
 
 Like Promises, signals can represent an error state: If a computed signal's callback throws, then that error is cached just like another value, and rethrown every time the signal is read.
 
@@ -268,8 +270,8 @@ The API here is designed to match the very rough ecosystem consensus among a lar
 The API is designed to reduce the number of allocations, to make signals suitable for embedding in JavaScript frameworks while reaching same or better performance than existing framework-customized signals. This implies:
 - Writable state signals are a single object, which can be accessed and set in one. (See implications below in the "Capability separation" section.)
 - Both state and computed signals are designed to be subclassable, to facilitiate frameworks' ability to add additional properties through public and private class fields (as well as methods for using that state).
-- The `notify` callback is called on just one signal; no surrounding event or array-based datastructure surrounds it.
-- Various callbacks (equals, notify, the computed callback) are called with the appropriate `this`, so that a new closure isn't needed per signal.
+- The `effect` callback is called on just one signal; no surrounding event or array-based datastructure surrounds it.
+- Various callbacks (equals, effect, the computed callback) are called with the appropriate `this`, so that a new closure isn't needed per signal.
 
 Some error conditions enforced by this API:
 - Setting state after getting it within the same computed throws.
@@ -278,7 +280,7 @@ Some error conditions enforced by this API:
 
 ### Implementing effects
 
-The `notify`/`start`/`stop` interface defined above gives the basis for implementing "effects": callbacks which are re-run when other signals change, purely for their side effect. The `effect` function used above in the initial example can be defined as follows:
+The `effect`/`startEffects`/`stopEffects` interface defined above gives the basis for implementing "effects": callbacks which are re-run when other signals change, purely for their side effect. A computed signal where an `effect` option was provided is called an "effect signal". The `effect` function used above in the initial example can be defined as follows:
 
 ```ts
 // This function would usually live in a library/framework, not aplication code
@@ -287,27 +289,27 @@ function effect(cb) {
     // Create a new computed signal which evalutes to cb, which schedules
     // a read of itself on the microtask queue whenever one of its dependencies
     // might change
-    let e = new Signal.Computed(cb, { notify() { queueMicrotask(this); } });
+    let e = new Signal.Computed(cb, { effect() { queueMicrotask(this); } });
     // Run the effect the first time and collect the dependencies
-    e();
-    // Subscribe to future changes to call notify()
-    e.start();
+    e.get();
+    // Subscribe to future changes to call effect()
+    e.startEffects();
     // Return a callback which can be used for cleaning the effect up
-    return () => e.stop();
+    return () => e.stopEffects();
 }
 ```
 
 The Signal API does not include any built-in function like `effect`. This is because effect scheduling is subtle and often ties into framework rendering cycles and other high-level framework-specific state or strategies which JS does not have access to.
 
-Walking through the different operations used here: The `notify` callback passed into the computed signal constructor is the function that is called (during the range between a `.start()` and `.stop()` call) when the signal goes from a "clean" state (where we know the cache is initialized and valid) into a "checked" or "dirty" state (where the cache might or might not be valid because at least one of the states which this recursively depends on has been changed).
+Walking through the different operations used here: The `effect` callback passed into the computed signal constructor is the function that is called (during the range between a `.startEffects()` and `.stopEffects()` call) when the signal goes from a "clean" state (where we know the cache is initialized and valid) into a "checked" or "dirty" state (where the cache might or might not be valid because at least one of the states which this recursively depends on has been changed).
 
-Calls to `notify` are ultimately triggered by a call to `.set()` on some state signal. This call is synchronous: it happens before `.set` returns. But there's no need to worry about this callback observing the signal graph in a half-processed state, because during a `notify` callback, no signal can be read or written, even in an `untrack` call. Because `notify` is called during `.set()`, it is interrupting another thread of logic, which might not be complete. To read or write signals from `notify`, schedule work to run later, e.g., by writing the signal down in a list to later be accessed, or with `queueMicrotask` as above.
+Calls to `effect` are ultimately triggered by a call to `.set()` on some state signal. This call is synchronous: it happens before `.set` returns. But there's no need to worry about this callback observing the signal graph in a half-processed state, because during a `effect` callback, no signal can be read or written, even in an `untrack` call. Because `effect` is called during `.set()`, it is interrupting another thread of logic, which might not be complete. To read or write signals from `effect`, schedule work to run later, e.g., by writing the signal down in a list to later be accessed, or with `queueMicrotask` as above.
 
-To avoid mistakes, an error is thrown if `.start()` or `.stop()` are called when no `notify` callback had been passed to the computed signal constructor.
+To avoid mistakes, an error is thrown if `.startEffects()` or `.stopEffects()` are called when no `effect` callback had been passed to the computed signal constructor.
 
-Note that it is perfectly possible to use `Signals` effectively without `notify`/`stop`/`start`, implementing effects by scheduling polling of computed signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
+Note that it is perfectly possible to use `Signals` effectively without `effect`/`stopEffects`/`startEffects`, implementing effects by scheduling polling of computed signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
 
-Both computed and state signals are garbage-collected like any JS values. When `.start()` has not yet been called, a computed signal will hold alive the signals that it references, but not vice versa. However, after `.start()` and before `.stop()`, the computed signal *will* be held alive by any state signals which it (recursively) references, since this may trigger a future `.notify()` call for its side effect. For this reason, remember to call `.stop()` when cleaning up effects.
+Both computed and state signals are garbage-collected like any JS values. When `.startEffects()` has not yet been called, a computed signal will hold alive the signals that it references, but not vice versa. However, after `.startEffects()` and before `.stopEffects()`, the computed signal *will* be held alive by any state signals which it (recursively) references, since this may trigger a future `.effect()` call for its side effect. For this reason, remember to call `.stopEffects()` when cleaning up effects.
 
 > TODO: Investigate whether this GC guarantee is implementable without too much overhead
 
@@ -335,33 +337,120 @@ This proposal has not yet been presented at TC39, but the intention is to bring 
 
 The collaborators on the signal proposal want to be especially conservative in how we push this proposal forward, so that we don't land in the trap of getting something shipped which we end up regretting and not actually using. Our plan is to do the following extra tasks, not required by the TC39 process, to make sure that this proposal is on track:
 - Before proposing for Stage 1: A concrete API is sketched out, and implemented in JS, with experiments showing that it can integrate reasonably well into some JS frameworks. Some medium-sized worked examples using the API directly are prepared.
-- Before proposing for Stage 2: The proposed signal API has been integrated into a large number of JS frameworks that we consider representative, and some large applications work with this basis. The collaborators have a solid grasp on the space of possible extensions to the API, and have concluded which (if any) should be added into this proposal. A polyfill implementation exists which is solid, well-tested (in a shared test format), and competitive in terms of performance.
+- Before proposing for Stage 2: The proposed signal API has been integrated into a large number of JS frameworks that we consider somewhat representative, and some large applications work with this basis. The collaborators have a solid grasp on the space of possible extensions to the API, and have concluded which (if any) should be added into this proposal. A polyfill implementation exists which is solid, well-tested (in a shared test format), and competitive in terms of performance.
 - Before proposing for Stage 3: There is an optimized native JS engine implementation of the signal API, allowing investigation of performance and memory management properties.
 
+## Signal algorithms
+
+This section describes each of the APIs exposed to JavaScript, in terms of the algorithms that they implement. This can be thought of as a proto-specification, and is included at this early point to nail down one possible set of semantics, while being very open to changes.
+
+Some aspects of the algorithm:
+- The order of reads of signals within a computed is significant, and is observable in the order that three types of callbacks (`effect`, `equals` and `new Signal.Computed`) are executed. This means that the sources of a computed signal must be stored as an ordered set, with duplicates removed.
+- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For `effect`, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others are stored in the value of the signal, to be rethrown when read, and such a rethrowing signal can be marked `~clean~` just like any other with a normal value.
+- The data structures are heavily circular, and some use of WeakRefs (for the sets representing sinks?) would be required to enable automatic garbage collection of non-effect computed signals when the other parts of the graph remain alive.
+
+### Hidden global state 
+
+Signal algorithms need to reference certain global state. In JavaScript specification terms, we refer to these as fields of the execution context.
+
+- `computing`: A computed signal currently being reevaluated due to a `.get` call, or `undefined`. Initially `undefined`.
+- `notifying`: Boolean denoting whether there is an `effect` callback currently executing. Initially `false`.
+
+### The `Signal` class
+
+`Signal` is an abstract class whose constructor throws. All signals are either state signals or computed signals. They have a common structure and `get` algorithm, described below.
+
+#### Common hidden fields
+
+- `value`: The previous cached value of the signal, or `~uninitialized~` for a never-read computed signal. The value may be an exception which gets rethrown when the value is read.
+- `state`: May be `~clean~`, `~checked~` or `~dirty~`. State signals are always `~clean~`.
+- `sources`: An ordered set of signals which this signal depends on. For state signals, this will be the empty set.
+- `sinks`: An ordered set of signals which depend on this signal. These will all be computed signals.
+- `equals`: The equals method provided in the options, defaulting to `Object.is`.
+
+#### Method: `Signal.prototype.get`
+
+1. If the current execution context is `notifying` or if this signal is `recalculating`, throw an exception.
+1. If `computing` is not `undefined`, add this signal to `computing`'s `sources` set, and add `computing` to this signal's `sinks` set.
+1. If this signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this signal is `~clean~`:
+    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` signal, and including this signal as the last thing to search).
+    1. Perform the "recalculate dirty computed signal" algorithm on that signal.
+1. At this point, this signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the signal's `value`. If the value is an exception, rethrow that exception.
+
+##### Algorithm: recalculate dirty computed signal
+
+1. Clear out this signal's `sources` set, and remove it from those sources' `sinks` sets.
+1. Save the previous `computing` value and set `computing` to this signal.
+1. Set this signal's `recalculating` to true.
+1. Run this computed signal's callback, using this signal as the this value. Save the return value, and if the callback threw an exception, store that for rethrowing.
+1. Set this signal's `recalculating` to false.
+1. Restore the previous `computing` value.
+1. Apply the "set signal value" algorithm to the callback's return value.
+1. If that algorithm returned `~dirty~`: mark all sinks of this signal as `~dirty~` (previously, the sinks may have been a mix of checked and dirty).
+1. Otherwise, that algorithm returned `~clean~`: In this case, for each `~checked~` sink of this signal, if all of that signal's sources are now clean, then mark that signal as `~clean~` as well. Apply this cleanup step to further sinks recursively, to any newly clean signals which have checked sinks.
+
+### The `Signal.State` class
+
+The constructor sets `value` to its parameter, `equals` based on options, and `state` to `~clean~`.
+
+#### Method: `Signal.State.prototype.set`
+
+1. If the current execution context is `notifying` or if this signal is in the execution context's `computing` signal's `sources` list [TODO: what about nested computeds? how does untrack relate to this?], throw an exception.
+1. Run the "set signal value" algorithm with this signal and the first parameter for the value.
+1. If that algorithm returned `~clean~`, then return undefined.
+1. Set the `state` of all `sinks` of this signal to `~dirty~` if they weren't already dirty.
+1. Set the `state` of all of the sinks' dependencies (recursively) to `~checked~` if they weren't already dirty or checked (that is, leave dirty markings in place).
+1. For each signal newly set to `~dirty~` or `~checked~`, if they have `necessary` set to true, then in depth-first order,
+    1. Set `notifying` to true while calling their `effect` method (saving aside any exception thrown, but ignoring the return value of `effect`), and then restore `notifying` to false.
+1. If any exception was thrown from the `effect` callbacks, propagate it to the caller after all `effect` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
+1. Return undefined.
+
+##### Set signal value algorithm
+
+1. If this algorithm was passed a value (as opposed to an exception for rethrowing, from the recalculate dirty computed signal algorithm):
+    1. Call this signal's `equals` function, given this signal as the `this` value, and passing as parameters the current `value` and the new value. If an exception is thrown, save that exception (for rethrowing when read) as the value of the signal and continue as if the callback had returned false.
+    1. If that returned true, return `~clean~`.
+1. Set the `value` of this signal to the parameter.
+1. Return `~dirty~`
+
+### The `Signal.Computed` class
+
+The constructor sets
+- `callback` to its first parameter
+- `equals` and `effect` based on options
+- `necessary` and `recalculating` to false
+- `state` to `~dirty~`
+- `value` to `~uninitialized~`
+
+#### Additional hidden fields
+
+- `callback`: The callback which is called to get the computed signal's value. Set to the first parameter passed to the constructor.
+- `effect`: The callback called when the signal goes into a `~checked~` state, or undefined.
+- `necessary`: Boolean indicating whether this signal is currently started. Initialy set to false on construction.
+- `recalculating`: A boolean indicating whether this signal is being recomputed due to a `.get()`, initially false.
+
+#### Method: `Signal.Computed.prototype.startEffects()`
+
+1. If this signal's `effect` is undefined, or if `necessary` is already true, throw an exception.
+1. Set `necessary` to true.
+1. If this signal's `state` is `~dirty~` or `~checked~`, then call the effect function (propagating any exception, but ignoring the return value).
+1. Return undefined
+
+#### Method: `Signal.Computed.prototype.stopEffects()`
+
+1. If this signal's `effect` is undefined, or if `necessary` is already false, throw an exception.
+1. Set `necessary` to false.
+1. Return undefined
+
+### `Signal.unsafe.untrack(cb)`
+
+1. Let c be the execution context's current `computing` state.
+1. Set `computing` to undefined.
+1. Call `cb`.
+1. Restore `computing` to c (even if `cb` threw an exception).
+1. Return the return value of `cb` (rethrowing any exception).
+
 ## FAQ
-
-#### Are signals the right thing to do?
-
-**Q**: Why add signals to JS when frameworks already provide them?
-
-**A**: See the "motivation" section above, but in particular, interoperability and DevTools stand out as the most immediately visible gains for application developers. (TODO: elaborate on practical benefits of interoperability.)
-
-**Q**: Isn't this proposal biased against React? It doesn't use signals, and it's the most popular framework.
-
-**A**: React's execution model keeps evolving, but we are unaware of any plans for React to use signals. Still, Preact Signals have demonstrated that React's performance can benefit from signals, and that integration is possible.
-
-**Q**: There's some pretty cool compiler work going on in reactivity, e.g., Marko, React Forget. Isn't it ineffcient to force runtimes to constantly rediscover dependencies, rather than have them be statically discovered with a smart complier?
-
-**A**: On one hand, yes, recording dependencies dynamically has cost. On the other hand, the benefit is that the dependency list can be more well-targeted, leading to fewer recalculations and better performance. For example, if the computed signal has a conditional in it, and only depends on a particular other signal during one of the branches, then if that branch is not hit, a dependency is not recorded, and an update to that signal does not trigger recalculation. By contrast, a compiler would need to take a conservative approximation of all dependencies across all paths. In practice, we've found that recording dependencies at runtime can have acceptable cost, and we plan to investigate whether this cost can be reduced in a native implementation. On the other hand, Dominic Gannaway experimented with a compiler-generated representation of conditional dependencies, and found that re-evaluating that conditional dependency was too inefficient for the scheme to be worth it.
-
-**Q**: Is the signal approach optimizing for the right thing? React often isn't the bottleneck for application performance; it's often network or simply prioritization.
-
-**A**: The React model works for some cases, but not others. A goal here is to be reliably fast. (TODO: Add link to a better explanation.)
-
-**Q**: Aren't signals less functional than React's programming model? Seems like a funny direction to go in when many are moving more towards functional programming.
-
-**A**: Ultimately, when it comes to actually programming in it, the programming models are pretty similar, given the pesky existence of state, even in React. The important property is the one-way dataflow and the coherence/soundness of the model--here, React and signals ensure similar properties in different ways (see the above section on soundness under goals). In particular, React apps end up needing to ensure that they don't recreate certain elements (due to non-exposed state), making the functional nature a leaky abstraction. (TODO: Revise this to be less mean.)
-
 **Q**: Is it a good idea to enable application state which is distributed, rather than at the component level or at the top level of the application?
 
 **A**: This flexibility is what allows signals to be used to implement complex reactive data structures and models which can be composed--quite useful things when sharing logic in UI development. At the same time, we expect that storing state at either the component or application level will be quite a common pattern with signals, as it is without 
@@ -374,15 +463,15 @@ The collaborators on the signal proposal want to be especially conservative in h
 
 **Q**: Can built-in signals even be used by frameworks, given their tight integration with rendering and ownership?
 
-**A**: Some frameworks may need some of the extension APIs to integrate well, but generally, we are optimistic that this API provides the right primives needed for usage with frameworks. We plan to validate this in prototypes.
+**A**: The parts which are more framework-specific tend to be in the area of effects, scheduling, and ownership/disposal, which this proposal does not attempt to solve. For performance reasons, some frameworks may need some of the extension APIs to integrate well, and this is something we are investigating. Our first priority with prototyping standards-track signals is to validate that they can sit "underneath" existing frameworks compatibly and with good performance.
 
 **Q**: Is the Signal API meant to be used directly by application developers, or wrapped by frameworks?
 
-**A**: The design is intended to fit either. The core functionality (state and computed constructors, reading and writing signals) is designed to be similar to existing popular signal implementations. On the other hand, features like `untrack` and `notify` are more error-prone and should probably be left to libraries and frameworks. Frameworks provide many other important features, such as managing ownership and disposal, and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems. Some frameworks may put a different skin around `Signal.State` and `Signal.Computed` for ergonomic reasons.
+**A**: The design is intended to fit either. The core functionality (state and computed constructors, reading and writing signals) is designed to be similar to existing popular signal implementations. On the other hand, features like `untrack` and `effect` are more error-prone and should probably be left to libraries and frameworks. Frameworks provide many other important features, such as managing ownership and disposal, and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems. Some frameworks may put a different skin around `Signal.State` and `Signal.Computed` for ergonomic reasons.
 
 **Q**: Do I have to tear down signals related to a widget when that widget is destroyed? What is the API for that?
 
-**A**: The relevant teardown operation here is `Signal.computed.prototype.stop`, for signals with a `notify` callback. "Pure" computed signals without a `notify` callback do not need to be cleaned up.
+**A**: The relevant teardown operation here is `Signal.computed.prototype.stopEffects`, for signals with a `effect` callback. "Pure" computed signals without a `effect` callback do not need to be cleaned up.
 
 **Q**: Do signals work with VDOM, or directly with the underlying HTML DOM?
 
@@ -404,7 +493,7 @@ The collaborators on the signal proposal want to be especially conservative in h
 
 **Q**: Are signals push-based or pull-based?
 
-**A**: Evaluation of computed signals is pull-based: computed signals are only evaluated when they are read, even if the underlying state changed. At the same time, changing state eagerly pushes cache invalidation to computed signals which depend on it, potentially triggering a `notify` callback. So signals may be thought of as a "push-pull" construction.
+**A**: Evaluation of computed signals is pull-based: computed signals are only evaluated when they are read, even if the underlying state changed. At the same time, changing state eagerly pushes cache invalidation to computed signals which depend on it, potentially triggering a `effect` callback. So signals may be thought of as a "push-pull" construction.
 
 **Q**: Do signals introduce nondeterminism into JavaScript execution?
 
@@ -412,7 +501,7 @@ The collaborators on the signal proposal want to be especially conservative in h
 
 **Q**: When I write to a state signal, when is the update to the computed signal scheduled?
 
-**A**: It isn't scheduled! The computed signal will recalculate itself the next time someone reads it. Synchronously, a `notify` callback may be called, enabling frameworks to schedule a read at the time that they find appropriate.
+**A**: It isn't scheduled! The computed signal will recalculate itself the next time someone reads it. Synchronously, a `effect` callback may be called, enabling frameworks to schedule a read at the time that they find appropriate.
 
 **Q**: When do writes to state signals take effect? Immediately, or are they batched?
 
@@ -428,21 +517,21 @@ The collaborators on the signal proposal want to be especially conservative in h
 
 **Q**: Will native signals be faster than existing JS signal implementations?
 
-**A**: We hope so (by a small constant factor), but this remains to be proven in code. JS engines aren't magic, and will ultimately need to implement the same kinds of algorithms as JS signals implementations do. See above section about performance.
+**A**: We hope so (by a small constant factor), but this remains to be proven in code. JS engines aren't magic, and will ultimately need to implement the same kinds of algorithms as JS implementations of signals. See above section about performance.
 
 #### Why are signals designed this way?
 
 **Q**: Why doesn't this proposal include an `effect()` function, when effects are necessary for any practical usage of signals?
 
-**A**: Effects inherently tie into scheduling and disposal, which are managed by frameworks and outside the scope of this proposal. Instead, this proposal includes the basis for implementing `effect` through the `notify`/`start`/`stop` API.
+**A**: Effects inherently tie into scheduling and disposal, which are managed by frameworks and outside the scope of this proposal. Instead, this proposal includes the basis for implementing effects through the `effect`/`startEffects`/`stopEffects` API.
 
 **Q**: Why are subscriptions automatic rather than providing a manual interface?
 
 **A**: Experience has shown that manual subscription interfaces for reactivity are unergonomic and error-prone. Automatic tracking is a core feature of signals.
 
-**Q**: Why does the `notify` callback run synchronously, rather than scheduled in a microtask?
+**Q**: Why does the `effect` callback run synchronously, rather than scheduled in a microtask?
 
-**A**: Because `notify` cannot read or write signals, there is no unsoundness brought on by calling it synchronously. A typical `notify` callback will add a signal to an Array to be read later, or mark a bit somewhere. It is unneccessary and expensive to make a separate microtask for these sorts of actions.
+**A**: Because `effect` cannot read or write signals, there is no unsoundness brought on by calling it synchronously. A typical `effect` callback will add a signal to an Array to be read later, or mark a bit somewhere. It is unneccessary and expensive to make a separate microtask for these sorts of actions.
 
 **Q**: This API is missing some nice things that my favorite framework provides, which makes it easier to program with signals. Can that be added to the standard too?
 
