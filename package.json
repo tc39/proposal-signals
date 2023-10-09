@@ -3,6 +3,7 @@
   "name": "proposal-signals",
   "description": "A repository for the ECMAScript Signal proposal.",
   "scripts": {
+    "example": "vite --host",
     "start": "npm run build-loose -- --watch",
     "build": "npm run build-loose -- --strict",
     "build-loose": "ecmarkup --load-biblio @tc39/ecma262-biblio --verbose spec.emu build/index.html --lint-spec"
@@ -15,7 +16,8 @@
   "license": "MIT",
   "devDependencies": {
     "@tc39/ecma262-biblio": "2.1.2616",
-    "ecmarkup": "^17.1.1"
+    "ecmarkup": "^17.1.1",
+    "vite": "^4.4.11"
   },
   "engines": {
     "node": ">= 12"

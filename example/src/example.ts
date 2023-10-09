@@ -1,0 +1,32 @@
+import { effect } from "./effects";
+import "./signals";
+
+// Setup UI
+
+const container = document.createElement("div");
+const element = document.createElement("div");
+const button = document.createElement("button");
+button.innerText = "Increment number";
+container.appendChild(element);
+container.appendChild(button);
+document.body.appendChild(container);
+
+// Example taken from README.md
+
+const counter = new Signal.State(0);
+const isEven = new Signal.Computed(() => (counter.get() & 1) == 0);
+const parity = new Signal.Computed(() => (isEven.get() ? "even" : "odd"));
+
+effect(() => {
+  element.innerText = `Counter: ${counter.get()}\nParity: ${parity.get()}`;
+});
+
+effect(() => {
+  Signal.unsafe.untrack(() => {
+    counter.set(counter.get() + 1);
+  });
+});
+
+button.addEventListener("click", () => {
+  counter.set(counter.get() + 1);
+});
