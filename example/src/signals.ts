@@ -25,95 +25,6 @@ export type ComputedOptions<T> = {
   equals?: (a: T, b: T) => boolean;
 };
 
-function isComputedDirty<T>(signal: Computed<T>): boolean {
-  const status = signal.status;
-  if (status === DIRTY) {
-    return true;
-  }
-  if (status === MAYBE_DIRTY) {
-    const dependencies = signal.dependencies;
-    if (dependencies !== null) {
-      for (const dependency of dependencies) {
-        if (
-          dependency.status === MAYBE_DIRTY &&
-          !isComputedDirty(dependency as Computed<T>)
-        ) {
-          dependency.status = CLEAN;
-          continue;
-        }
-        if (dependency.status === DIRTY) {
-          updateComputed(dependency as Computed<T>);
-          // Might have been mutated from above get.
-          if (signal.status === DIRTY) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-  return false;
-}
-
-function removeConsumer<T>(signal: Computed<T>): void {
-  const dependencies = signal.dependencies;
-  if (dependencies !== null) {
-    for (const dependency of dependencies) {
-      dependency.consumers?.delete(signal);
-    }
-  }
-}
-
-function executeComputed<T>(signal: Computed<T>): T {
-  const previous_dependencies = current_dependencies;
-  const previous_consumer = current_consumer;
-  const previous_effectful_signal = current_effectful_consumer;
-  current_dependencies = null;
-  current_consumer = signal;
-  if (signal.effect !== null) {
-    current_effectful_consumer = signal;
-  }
-
-  try {
-    const value = signal.callback();
-    let dependencies = signal.dependencies;
-
-    if (current_dependencies !== null) {
-      removeConsumer(signal);
-
-      signal.dependencies = dependencies = current_dependencies as Set<
-        Signal<any>
-      >;
-
-      for (const dependency of dependencies) {
-        if (dependency.consumers === null) {
-          dependency.consumers = new Set([signal]);
-        } else {
-          dependency.consumers.add(signal);
-        }
-      }
-    } else if (dependencies !== null) {
-      removeConsumer(signal);
-      dependencies.clear();
-    }
-
-    return value;
-  } finally {
-    current_dependencies = previous_dependencies;
-    current_consumer = previous_consumer;
-    current_effectful_consumer = previous_effectful_signal;
-  }
-}
-
-function updateComputed<T>(signal: Computed<T>): void {
-  signal.status = CLEAN;
-  const value = executeComputed(signal);
-  const equals = signal.equals!;
-  if (!equals.call(signal, signal.value, value)) {
-    signal.value = value;
-    markSignalConsumers(signal, DIRTY);
-  }
-}
-
 function markSignalConsumers<T>(
   signal: Signal<T>,
   toStatus: SignalStatus
@@ -202,20 +113,16 @@ function untrack<T>(fn: () => T): T {
   }
 }
 
-export const unsafe = {
-  untrack,
-};
-
 export class Computed<T> extends Signal<T> {
-  callback: () => T;
-  dependencies: null | Set<Signal<any>>;
+  #callback: () => T;
+  #dependencies: null | Set<Signal<any>>;
   effect: null | ((signal: Computed<T>) => void);
   effecting: boolean;
 
   constructor(callback: () => T, options?: ComputedOptions<T>) {
     super(NO_VALUE as T, options);
-    this.callback = callback;
-    this.dependencies = null;
+    this.#callback = callback;
+    this.#dependencies = null;
     this.effect = options?.effect || null;
     this.effecting = false;
   }
@@ -230,10 +137,103 @@ export class Computed<T> extends Signal<T> {
     this.effecting = false;
   }
 
+  #execute<T>(signal: Computed<T>): T {
+    const previous_dependencies = current_dependencies;
+    const previous_consumer = current_consumer;
+    const previous_effectful_signal = current_effectful_consumer;
+    current_dependencies = null;
+    current_consumer = signal;
+    if (signal.effect !== null) {
+      current_effectful_consumer = signal;
+    }
+
+    try {
+      const value = signal.#callback();
+      let dependencies = signal.#dependencies;
+
+      if (current_dependencies !== null) {
+        Computed.#removeConsumer(signal);
+
+        signal.#dependencies = dependencies = current_dependencies as Set<
+          Signal<any>
+        >;
+
+        for (const dependency of dependencies) {
+          if (dependency.consumers === null) {
+            dependency.consumers = new Set([signal]);
+          } else {
+            dependency.consumers.add(signal);
+          }
+        }
+      } else if (dependencies !== null) {
+        Computed.#removeConsumer(signal);
+        dependencies.clear();
+      }
+
+      return value;
+    } finally {
+      current_dependencies = previous_dependencies;
+      current_consumer = previous_consumer;
+      current_effectful_consumer = previous_effectful_signal;
+    }
+  }
+
+  static #removeConsumer<T>(signal: Computed<T>): void {
+    const dependencies = signal.#dependencies;
+    if (dependencies !== null) {
+      for (const dependency of dependencies) {
+        dependency.consumers?.delete(signal);
+      }
+    }
+  }
+
+  static #updateComputed<T>(signal: Computed<T>): void {
+    signal.status = CLEAN;
+    const value = signal.#execute(signal);
+    const equals = signal.equals!;
+    if (!equals.call(signal, signal.value, value)) {
+      signal.value = value;
+      markSignalConsumers(signal, DIRTY);
+    }
+  }
+
+  static #isDirty<T>(signal: Computed<T>): boolean {
+    const status = signal.status;
+    if (status === DIRTY) {
+      return true;
+    }
+    if (status === MAYBE_DIRTY) {
+      const dependencies = signal.#dependencies;
+      if (dependencies !== null) {
+        for (const dependency of dependencies) {
+          if (
+            dependency.status === MAYBE_DIRTY &&
+            !Computed.#isDirty(dependency as Computed<T>)
+          ) {
+            dependency.status = CLEAN;
+            continue;
+          }
+          if (dependency.status === DIRTY) {
+            Computed.#updateComputed(dependency as Computed<T>);
+            // Might have been mutated from above get.
+            if (signal.status === DIRTY) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   get(): T {
-    if (isComputedDirty(this)) {
-      updateComputed(this);
+    if (Computed.#isDirty(this)) {
+      Computed.#updateComputed(this);
     }
     return super.get();
   }
 }
+
+export const unsafe = {
+  untrack,
+};
