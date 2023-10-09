@@ -1,4 +1,5 @@
 import type { Computed } from "./signals";
+import * as Signal from "./signals";
 
 let queue: null | Computed<any>[] = null;
 let flush_count = 0;
@@ -28,7 +29,7 @@ function enqueueSignal(signal: Computed<any>): void {
   queue.push(signal);
 }
 
-export function effect<T>(cb: (signal: Computed<T>) => void) {
+export function effect<T>(cb: () => void) {
   // Create a new computed signal which evalutes to cb, which schedules
   // a read of itself on the microtask queue whenever one of its dependencies
   // might change

@@ -1,5 +1,5 @@
 import { effect } from "./effects";
-import "./signals";
+import * as Signal from "./signals";
 
 // Setup UI
 

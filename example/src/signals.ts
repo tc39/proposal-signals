@@ -25,7 +25,7 @@ export type StateOptions<T> = {
 };
 
 export type ComputedOptions<T> = {
-  effect?: (this: Signal<T>) => void;
+  effect?: (signal: Computed<T>) => void;
   equals?: (a: T, b: T) => boolean;
 };
 
@@ -149,7 +149,7 @@ function updateComputed<T>(signal: Computed<T>): void {
   signal.status = CLEAN;
   const value = executeComputed(signal);
   const equals = signal.equals!;
-  if (!equals(value, signal.value)) {
+  if (!equals.call(signal, signal.value, value)) {
     signal.value = value;
     markSignalConsumers(signal, DIRTY);
   }
@@ -172,7 +172,7 @@ function markSignalConsumers<T>(
       if (status === CLEAN) {
         const effect = consumer.effect;
         if (effect !== null && consumer.effecting) {
-          effect(consumer);
+          effect.call(consumer, consumer);
         } else {
           markSignalConsumers(consumer, MAYBE_DIRTY);
         }
@@ -225,7 +225,7 @@ class Signal<T> {
 
 export class State<T> extends Signal<T> {
   set(value: T): void {
-    if (!this.equals(this.value, value)) {
+    if (!this.equals.call(this, this.value, value)) {
       this.value = value;
       if (
         !current_untracking &&
@@ -236,7 +236,7 @@ export class State<T> extends Signal<T> {
         const effect = current_effectful_consumer.effect;
         if (effect !== null) {
           current_effectful_consumer.status = DIRTY;
-          effect(current_effectful_consumer);
+          effect.call(current_effectful_consumer, current_effectful_consumer);
         }
       }
       markSignalConsumers(this, DIRTY);
@@ -254,10 +254,14 @@ function untrack<T>(fn: () => T): T {
   }
 }
 
+export const unsafe = {
+  untrack,
+};
+
 export class Computed<T> extends Signal<T> {
   callback: () => T;
   dependencies: null | Signal<any>[];
-  effect: null | ((signal: Signal<T>) => void);
+  effect: null | ((signal: Computed<T>) => void);
   effecting: boolean;
 
   constructor(callback: () => T, options?: ComputedOptions<T>) {
@@ -284,24 +288,4 @@ export class Computed<T> extends Signal<T> {
     }
     return super.get();
   }
-}
-
-declare global {
-  var Signal: {
-    State;
-    Computed;
-    unsafe: {
-      untrack;
-    };
-  };
-}
-
-if (!("Signal" in globalThis)) {
-  globalThis.Signal = {
-    State,
-    Computed,
-    unsafe: {
-      untrack,
-    },
-  };
 }
