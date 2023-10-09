@@ -335,6 +335,8 @@ TODO: Link to more detailed resources investigating each of these
 
 This proposal has not yet been presented at TC39, but the intention is to bring it to the committee as soon as it's in a good shape. In other words, it's at Stage 0.
 
+Currently, there is a small set of example code [implementing signals](https://github.com/EisenbergEffect/proposal-signals/blob/main/example/src/signals.ts) and using them in a very small piece of sample code. The immediate next steps will be to add tests and larger sample usages, including integration into frameworks, while increasing the quality of the sample implementation.
+
 The collaborators on the signal proposal want to be especially conservative in how we push this proposal forward, so that we don't land in the trap of getting something shipped which we end up regretting and not actually using. Our plan is to do the following extra tasks, not required by the TC39 process, to make sure that this proposal is on track:
 - Before proposing for Stage 1: A concrete API is sketched out, and implemented in JS, with experiments showing that it can integrate reasonably well into some JS frameworks. Some medium-sized worked examples using the API directly are prepared.
 - Before proposing for Stage 2: The proposed signal API has been integrated into a large number of JS frameworks that we consider somewhat representative, and some large applications work with this basis. The collaborators have a solid grasp on the space of possible extensions to the API, and have concluded which (if any) should be added into this proposal. A polyfill implementation exists which is solid, well-tested (in a shared test format), and competitive in terms of performance.
