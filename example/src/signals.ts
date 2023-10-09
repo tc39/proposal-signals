@@ -7,12 +7,8 @@ const NO_VALUE = Symbol();
 
 let current_consumer: null | Computed<any> = null;
 let current_effectful_consumer: null | Computed<any> = null;
-let current_dependencies: null | Signal<any>[] = null;
-let current_dependencies_index = 0;
+let current_dependencies: null | Set<Signal<any>> = null;
 let current_untracking = false;
-// Used to prevent over-subscribing dependencies on a consumer
-let current_global_access_id = 1;
-let current_access_id = 1;
 
 type SignalStatus =
   | typeof DIRTY
@@ -36,10 +32,7 @@ function isComputedDirty<T>(signal: Computed<T>): boolean {
   } else if (status === MAYBE_DIRTY) {
     const dependencies = signal.dependencies;
     if (dependencies !== null) {
-      const length = dependencies.length;
-      for (let i = 0; i < length; i++) {
-        const dependency = dependencies[i];
-
+      for (const dependency of dependencies) {
         if (
           dependency.status === MAYBE_DIRTY &&
           !isComputedDirty(dependency as Computed<T>)
@@ -60,41 +53,20 @@ function isComputedDirty<T>(signal: Computed<T>): boolean {
   return false;
 }
 
-function removeConsumer<T>(signal: Computed<T>, start_index: number): void {
+function removeConsumer<T>(signal: Computed<T>): void {
   const dependencies = signal.dependencies;
   if (dependencies !== null) {
-    for (let i = start_index; i < dependencies.length; i++) {
-      const dependency = dependencies[i];
-      const consumers = dependency.consumers;
-      let consumers_length = 0;
-      if (consumers !== null) {
-        consumers_length = consumers.length - 1;
-        if (consumers_length === 0) {
-          dependency.consumers = null;
-        } else {
-          const index = consumers.indexOf(signal);
-          // Swap with last element and then remove.
-          consumers[index] = consumers[consumers_length];
-          consumers.pop();
-        }
-      }
+    for (const dependency of dependencies) {
+      dependency.consumers?.delete(signal);
     }
   }
 }
 
 function executeComputed<T>(signal: Computed<T>): T {
   const previous_dependencies = current_dependencies;
-  const previous_dependencies_index = current_dependencies_index;
-  const previous_access_id = current_access_id;
   const previous_consumer = current_consumer;
   const previous_effectful_signal = current_effectful_consumer;
-  current_dependencies = null as null | Signal<T>[];
-  current_dependencies_index = 0;
-  current_global_access_id++;
-  if (current_global_access_id === 255) {
-    current_global_access_id = 1;
-  }
-  current_access_id = current_global_access_id;
+  current_dependencies = null;
   current_consumer = signal;
   if (signal.effect !== null) {
     current_effectful_consumer = signal;
@@ -105,41 +77,27 @@ function executeComputed<T>(signal: Computed<T>): T {
     let dependencies = signal.dependencies;
 
     if (current_dependencies !== null) {
-      removeConsumer(signal, current_dependencies_index);
+      removeConsumer(signal);
 
-      if (dependencies !== null && current_dependencies_index > 0) {
-        dependencies.length =
-          current_dependencies_index + current_dependencies.length;
-        for (let i = 0; i < current_dependencies.length; i++) {
-          dependencies[current_dependencies_index + i] =
-            current_dependencies[i];
-        }
-      } else {
-        signal.dependencies = dependencies = current_dependencies;
-      }
+      signal.dependencies = dependencies = current_dependencies as Set<
+        Signal<any>
+      >;
 
-      for (let i = current_dependencies_index; i < dependencies.length; i++) {
-        const dependency = dependencies[i];
-
+      for (const dependency of dependencies) {
         if (dependency.consumers === null) {
-          dependency.consumers = [signal];
+          dependency.consumers = new Set([signal]);
         } else {
-          dependency.consumers.push(signal);
+          dependency.consumers.add(signal);
         }
       }
-    } else if (
-      dependencies !== null &&
-      current_dependencies_index < dependencies.length
-    ) {
-      removeConsumer(signal, current_dependencies_index);
-      dependencies.length = current_dependencies_index;
+    } else if (dependencies !== null) {
+      removeConsumer(signal);
+      dependencies.clear();
     }
 
     return value;
   } finally {
     current_dependencies = previous_dependencies;
-    current_dependencies_index = previous_dependencies_index;
-    current_access_id = previous_access_id;
     current_consumer = previous_consumer;
     current_effectful_consumer = previous_effectful_signal;
   }
@@ -161,9 +119,7 @@ function markSignalConsumers<T>(
 ): void {
   const consumers = signal.consumers;
   if (consumers !== null) {
-    const length = consumers.length;
-    for (let i = 0; i < length; i++) {
-      const consumer = consumers[i];
+    for (const consumer of consumers) {
       const status = consumer.status;
       if (status === DIRTY) {
         continue;
@@ -182,8 +138,7 @@ function markSignalConsumers<T>(
 }
 
 class Signal<T> {
-  #access_id: number;
-  consumers: null | Computed<any>[];
+  consumers: null | Set<Computed<any>>;
   equals: (a: T, b: T) => boolean;
   status: SignalStatus;
   value: T;
@@ -201,19 +156,11 @@ class Signal<T> {
     }
     // Register the dependency on the current consumer signal.
     if (current_consumer !== null && !current_untracking) {
-      const dependencies = current_consumer.dependencies;
-      if (
-        current_dependencies === null &&
-        dependencies !== null &&
-        dependencies[current_dependencies_index] === this
-      ) {
-        current_dependencies_index++;
-      } else if (current_dependencies === null) {
-        current_dependencies = [this];
-      } else if (this.#access_id !== current_access_id) {
-        current_dependencies.push(this);
+      if (current_dependencies === null) {
+        current_dependencies = new Set([this]);
+      } else if (!current_dependencies.has(this)) {
+        current_dependencies.add(this);
       }
-      this.#access_id = current_access_id;
     }
   }
 
@@ -260,7 +207,7 @@ export const unsafe = {
 
 export class Computed<T> extends Signal<T> {
   callback: () => T;
-  dependencies: null | Signal<any>[];
+  dependencies: null | Set<Signal<any>>;
   effect: null | ((signal: Computed<T>) => void);
   effecting: boolean;
 
