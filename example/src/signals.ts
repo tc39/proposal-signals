@@ -29,7 +29,8 @@ function isComputedDirty<T>(signal: Computed<T>): boolean {
   const status = signal.status;
   if (status === DIRTY) {
     return true;
-  } else if (status === MAYBE_DIRTY) {
+  }
+  if (status === MAYBE_DIRTY) {
     const dependencies = signal.dependencies;
     if (dependencies !== null) {
       for (const dependency of dependencies) {
@@ -181,7 +182,7 @@ export class State<T> extends Signal<T> {
         current_effectful_consumer.status === CLEAN
       ) {
         const effect = current_effectful_consumer.effect;
-        if (effect !== null) {
+        if (effect !== null && current_effectful_consumer.effecting) {
           current_effectful_consumer.status = DIRTY;
           effect.call(current_effectful_consumer, current_effectful_consumer);
         }
