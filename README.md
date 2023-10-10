@@ -219,7 +219,7 @@ namespace Signal {
 
     namespace unsafe {
         // Run a callback with all tracking disabled (even for nested computed).
-        function untrack(cb: () => T): T;
+        function untrack<T>(cb: () => T): T;
     }
 }
 
