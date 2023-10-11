@@ -91,7 +91,7 @@ function isSignalDirty<T>(signal: Computed<T> | Effect<T>): boolean {
           source.status = CLEAN;
           continue;
         }
-        if (sourceStatus === DIRTY) {
+        if (source.status === DIRTY) {
           updateComputedSignal(source as Computed<T>);
           // Might have been mutated from above get.
           if (signal.status === DIRTY) {
@@ -172,7 +172,7 @@ function destroyEffectChildren<V>(signal: Effect<V>): void {
 function updateComputedSignal<T>(signal: Computed<T>): void {
   signal.status =
     current_skip_consumer || (current_effect === null && signal.unowned)
-      ? MAYBE_DIRTY
+      ? DIRTY
       : CLEAN;
   const value = executeSignalCallback(signal);
   const equals = signal.equals!;
@@ -225,7 +225,7 @@ function executeSignalCallback<T>(signal: Computed<T> | Effect<T>): T {
   }
 }
 
-function updateSiganlSources<T>(signal: Signal<T>): void {
+function updateSignalSources<T>(signal: Signal<T>): void {
   if (signal.status === DESTROYED) {
     return;
   }
@@ -262,7 +262,7 @@ class Signal<T> {
   }
 
   get(): T {
-    updateSiganlSources(this);
+    updateSignalSources(this);
     return this.value;
   }
 }
@@ -322,7 +322,7 @@ export class Computed<T> extends Signal<T> {
   }
 
   get(): T {
-    updateSiganlSources(this);
+    updateSignalSources(this);
     if (isSignalDirty(this)) {
       updateComputedSignal(this);
     }
