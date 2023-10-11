@@ -123,6 +123,10 @@ function removeConsumer<T>(
         source instanceof Computed &&
         source.unowned
       ) {
+        const oncleanup = source.oncleanup;
+        if (source.value !== UNINITIALIZED && typeof oncleanup === "function") {
+          oncleanup.call(source);
+        }
         removeConsumer(source, true);
       }
     }
@@ -130,6 +134,7 @@ function removeConsumer<T>(
 }
 
 function destroySignal<T>(signal: Signal<T>): void {
+  const value = signal.value;
   signal.status = DESTROYED;
   signal.value = UNINITIALIZED as T;
   signal.equals = Object.is;
@@ -139,7 +144,7 @@ function destroySignal<T>(signal: Signal<T>): void {
     signal.sources = null;
     destroyEffectChildren(signal);
     const oncleanup = signal.oncleanup;
-    if (typeof oncleanup === "function") {
+    if (value !== UNINITIALIZED && typeof oncleanup === "function") {
       oncleanup.call(signal);
     }
     signal.children = null;
@@ -188,7 +193,7 @@ function executeSignalCallback<T>(signal: Computed<T> | Effect<T>): T {
 
   try {
     const oncleanup = signal.oncleanup;
-    if (typeof oncleanup === "function") {
+    if (signal.value !== UNINITIALIZED && typeof oncleanup === "function") {
       oncleanup.call(signal);
     }
     const value = signal.callback();
@@ -344,13 +349,19 @@ export class Effect<T> extends Signal<T> {
     }
   }
 
-  // TODO: Doesn't implement the GC mechanics
   start(notify: (signal: Effect<T>) => void): void {
     this.notify = notify;
   }
 
-  // TODO: Doesn't implement the GC mechanics
   stop(): void {
+    if (this.notify !== null) {
+      removeConsumer(this, true);
+      destroyEffectChildren(this);
+      const oncleanup = this.oncleanup;
+      if (this.value !== UNINITIALIZED && typeof oncleanup === "function") {
+        oncleanup.call(this);
+      }
+    }
     this.notify = null;
   }
 
