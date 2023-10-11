@@ -75,14 +75,23 @@ function isSignalDirty<T>(signal: Computed<T> | Effect<T>): boolean {
     const sources = signal.sources;
     if (sources !== null) {
       for (const source of sources) {
+        const sourceStatus = source.status;
+
+        if (source instanceof State) {
+          if (sourceStatus === DIRTY) {
+            source.status = CLEAN;
+            return true;
+          }
+          continue;
+        }
         if (
-          source.status === MAYBE_DIRTY &&
+          sourceStatus === MAYBE_DIRTY &&
           !isSignalDirty(source as Computed<T>)
         ) {
           source.status = CLEAN;
           continue;
         }
-        if (source.status === DIRTY) {
+        if (sourceStatus === DIRTY) {
           updateComputedSignal(source as Computed<T>);
           // Might have been mutated from above get.
           if (signal.status === DIRTY) {
@@ -156,7 +165,10 @@ function destroyEffectChildren<V>(signal: Effect<V>): void {
 }
 
 function updateComputedSignal<T>(signal: Computed<T>): void {
-  signal.status = CLEAN;
+  signal.status =
+    current_skip_consumer || (current_effect === null && signal.unowned)
+      ? MAYBE_DIRTY
+      : CLEAN;
   const value = executeSignalCallback(signal);
   const equals = signal.equals!;
   if (!equals.call(signal, signal.value, value)) {

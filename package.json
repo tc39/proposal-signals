@@ -5,6 +5,7 @@
   "scripts": {
     "example": "vite --host",
     "start": "npm run build-loose -- --watch",
+    "test": "vitest",
     "build": "npm run build-loose -- --strict",
     "build-loose": "ecmarkup --load-biblio @tc39/ecma262-biblio --verbose spec.emu build/index.html --lint-spec"
   },
@@ -17,7 +18,8 @@
   "devDependencies": {
     "@tc39/ecma262-biblio": "2.1.2616",
     "ecmarkup": "^17.1.1",
-    "vite": "^4.4.11"
+    "vite": "^4.4.11",
+    "vitest": "^0.34.6"
   },
   "engines": {
     "node": ">= 12"
