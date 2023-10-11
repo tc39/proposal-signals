@@ -27,6 +27,25 @@ effect(() => {
   });
 });
 
+// Expanded example showing how effects work
+
+effect(() => {
+  console.log("update main effect", counter.get());
+
+  // Nested effects
+  effect(() => {
+    console.log("create nested effect");
+
+    return () => {
+      console.log("cleanup nested effect");
+    };
+  });
+
+  return () => {
+    console.log("cleanup main effect");
+  };
+});
+
 button.addEventListener("click", () => {
   counter.set(counter.get() + 1);
 });
