@@ -144,6 +144,35 @@ test("effect signal should trigger oncleanup and correctly disconnect from graph
   expect(cleanups).toEqual(["b", "c"]);
 });
 
+test("effect signal should notify only once", () => {
+  let log: string[] = [];
+
+  const a = new Signal.State(0);
+  const b = new Signal.Computed(() => a.get() * 2);
+  const c = new Signal.Effect(() => {
+    a.get();
+    b.get();
+    log.push("effect ran");
+  });
+
+  c.start(() => {
+    log.push("notified");
+  });
+
+  expect(log).toEqual([]);
+
+  c.get();
+
+  expect(log).toEqual(["effect ran"]);
+
+  a.set(1);
+  c.get();
+
+  expect(log).toEqual(["effect ran", "notified", "effect ran"]);
+
+  c.stop();
+});
+
 test("https://perf.js.hyoo.ru/#!bench=9h2as6_u0mfnn", () => {
   let res: number[] = [];
   let effects: Signal.Effect<any>[] = [];
