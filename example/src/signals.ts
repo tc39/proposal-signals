@@ -42,10 +42,7 @@ function markSignalConsumers<T>(
       if (status === DIRTY) {
         continue;
       }
-      if (isEffect && !forceNotify && consumer.pending_notify) {
-        if (consumer !== current_effect && toStatus === DIRTY) {
-          consumer.status = DIRTY;
-        }
+      if (isEffect && !forceNotify && consumer === current_effect) {
         continue;
       }
       consumer.status = toStatus;
@@ -259,12 +256,6 @@ function pushChild<T>(target: Effect<T>, child: Signal<T>): void {
 function notifyEffect<T>(signal: Effect<T>): void {
   const notify = signal.notify;
   if (notify !== null) {
-    signal.pending_notify = true;
-    if (signal.notify_id === Number.MAX_SAFE_INTEGER) {
-      signal.notify_id = 0;
-    } else {
-      signal.notify_id++;
-    }
     notify.call(signal, signal);
   }
 }
@@ -342,8 +333,6 @@ export class Effect<T> extends Signal<T> {
   callback: () => T;
   sources: null | Set<Signal<any>>;
   notify: null | ((signal: Effect<T>) => void);
-  pending_notify: boolean;
-  notify_id: number;
   oncleanup: null | (() => void);
   children: null | Signal<any>[];
 
@@ -354,8 +343,6 @@ export class Effect<T> extends Signal<T> {
     this.notify = null;
     this.oncleanup = null;
     this.children = null;
-    this.pending_notify = false;
-    this.notify_id = 0;
     if (current_effect !== null) {
       pushChild(current_effect, this);
     }
@@ -384,12 +371,8 @@ export class Effect<T> extends Signal<T> {
       );
     }
     if (isSignalDirty(this)) {
-      const prev_notify_id = this.notify_id;
       this.status = CLEAN;
       updateEffectSignal(this);
-      if (this.notify_id === prev_notify_id) {
-        this.pending_notify = false;
-      }
     }
     return this.value;
   }
