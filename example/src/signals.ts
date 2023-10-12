@@ -31,24 +31,26 @@ export type ComputedOptions<T> = {
 
 function markSignalConsumers<T>(
   signal: Signal<T>,
-  toStatus: SignalStatus
+  toStatus: SignalStatus,
+  forceNotify: boolean
 ): void {
   const consumers = signal.consumers;
   if (consumers !== null) {
     for (const consumer of consumers) {
       const status = consumer.status;
-      if (status === DIRTY) {
+      const isEffect = consumer instanceof Effect;
+      if (
+        status === DIRTY ||
+        (isEffect && !forceNotify && consumer.pending_notify)
+      ) {
         continue;
       }
       consumer.status = toStatus;
       if (status === CLEAN) {
-        if (consumer instanceof Effect) {
-          const notify = consumer.notify;
-          if (notify !== null) {
-            notify.call(consumer, consumer);
-          }
+        if (isEffect) {
+          notifyEffect(consumer);
         } else {
-          markSignalConsumers(consumer, MAYBE_DIRTY);
+          markSignalConsumers(consumer, MAYBE_DIRTY, forceNotify);
         }
       }
     }
@@ -92,7 +94,7 @@ function isSignalDirty<T>(signal: Computed<T> | Effect<T>): boolean {
           continue;
         }
         if (source.status === DIRTY) {
-          updateComputedSignal(source as Computed<T>);
+          updateComputedSignal(source as Computed<T>, true);
           // Might have been mutated from above get.
           if (signal.status === DIRTY) {
             return true;
@@ -169,7 +171,10 @@ function destroyEffectChildren<V>(signal: Effect<V>): void {
   }
 }
 
-function updateComputedSignal<T>(signal: Computed<T>): void {
+function updateComputedSignal<T>(
+  signal: Computed<T>,
+  forceNotify: boolean
+): void {
   signal.status =
     current_skip_consumer || (current_effect === null && signal.unowned)
       ? DIRTY
@@ -178,7 +183,7 @@ function updateComputedSignal<T>(signal: Computed<T>): void {
   const equals = signal.equals!;
   if (!equals.call(signal, signal.value, value)) {
     signal.value = value;
-    markSignalConsumers(signal, DIRTY);
+    markSignalConsumers(signal, DIRTY, forceNotify);
   }
 }
 
@@ -248,6 +253,19 @@ function pushChild<T>(target: Effect<T>, child: Signal<T>): void {
   }
 }
 
+function notifyEffect<T>(signal: Effect<T>): void {
+  const notify = signal.notify;
+  if (notify !== null) {
+    signal.pending_notify = true;
+    if (signal.notify_id === Number.MAX_SAFE_INTEGER) {
+      signal.notify_id = 0;
+    } else {
+      signal.notify_id++;
+    }
+    notify.call(signal, signal);
+  }
+}
+
 class Signal<T> {
   consumers: null | Set<Computed<any> | Effect<any>>;
   equals: (a: T, b: T) => boolean;
@@ -282,24 +300,11 @@ export class State<T> extends Signal<T> {
         current_effect.consumers === null &&
         current_effect.status === CLEAN
       ) {
-        const notify = current_effect.notify;
         current_effect.status = DIRTY;
-        if (notify !== null) {
-          notify.call(current_effect, current_effect);
-        }
+        notifyEffect(current_effect);
       }
-      markSignalConsumers(this, DIRTY);
+      markSignalConsumers(this, DIRTY, true);
     }
-  }
-}
-
-function untrack<T>(fn: () => T): T {
-  const previous_untracking = current_untracking;
-  try {
-    current_untracking = true;
-    return fn();
-  } finally {
-    current_untracking = previous_untracking;
   }
 }
 
@@ -324,7 +329,7 @@ export class Computed<T> extends Signal<T> {
   get(): T {
     updateSignalSources(this);
     if (isSignalDirty(this)) {
-      updateComputedSignal(this);
+      updateComputedSignal(this, false);
     }
     return this.value;
   }
@@ -334,6 +339,8 @@ export class Effect<T> extends Signal<T> {
   callback: () => T;
   sources: null | Set<Signal<any>>;
   notify: null | ((signal: Effect<T>) => void);
+  pending_notify: boolean;
+  notify_id: number;
   oncleanup: null | (() => void);
   children: null | Signal<any>[];
 
@@ -344,6 +351,8 @@ export class Effect<T> extends Signal<T> {
     this.notify = null;
     this.oncleanup = null;
     this.children = null;
+    this.pending_notify = false;
+    this.notify_id = 0;
     if (current_effect !== null) {
       pushChild(current_effect, this);
     }
@@ -372,10 +381,24 @@ export class Effect<T> extends Signal<T> {
       );
     }
     if (isSignalDirty(this)) {
+      const prev_notify_id = this.notify_id;
       this.status = CLEAN;
       updateEffectSignal(this);
+      if (this.notify_id === prev_notify_id) {
+        this.pending_notify = false;
+      }
     }
     return this.value;
+  }
+}
+
+function untrack<T>(fn: () => T): T {
+  const previous_untracking = current_untracking;
+  try {
+    current_untracking = true;
+    return fn();
+  } finally {
+    current_untracking = previous_untracking;
   }
 }
 
