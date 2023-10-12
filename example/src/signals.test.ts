@@ -144,6 +144,84 @@ test("effect signal should trigger oncleanup and correctly disconnect from graph
   expect(cleanups).toEqual(["b", "c"]);
 });
 
+test("effect signal should propogate correctly with computed signals", () => {
+  let log: string[] = [];
+  let effects: Signal.Effect<any>[] = [];
+
+  const queueEffect = (signal) => {
+    effects.push(signal);
+  };
+
+  const flush = () => {
+    effects.forEach((e) => e.get());
+    effects = [];
+  };
+
+  const count = new Signal.State(0);
+  const double = new Signal.Computed(() => count.get() * 2);
+  const triple = new Signal.Computed(() => count.get() * 3);
+  const quintuple = new Signal.Computed(() => double.get() + triple.get());
+
+  const a = new Signal.Effect(() => {
+    log.push("four");
+    log.push(
+      `${count.get()}:${double.get()}:${triple.get()}:${quintuple.get()}`
+    );
+  });
+  a.start(queueEffect);
+  a.get();
+  const b = new Signal.Effect(() => {
+    log.push("three");
+    log.push(`${double.get()}:${triple.get()}:${quintuple.get()}`);
+  });
+  b.start(queueEffect);
+  b.get();
+  const c = new Signal.Effect(() => {
+    log.push("two");
+    log.push(`${count.get()}:${double.get()}`);
+  });
+  c.start(queueEffect);
+  c.get();
+  const d = new Signal.Effect(() => {
+    log.push("one");
+    log.push(`${double.get()}`);
+  });
+  d.start(queueEffect);
+  d.get();
+
+  expect(log).toEqual([
+    "four",
+    "0:0:0:0",
+    "three",
+    "0:0:0",
+    "two",
+    "0:0",
+    "one",
+    "0",
+  ]);
+
+  log = [];
+
+  count.set(1)
+  flush();
+
+  expect(log).toEqual([
+    "four",
+    "1:2:3:5",
+    "three",
+    "2:3:5",
+    "two",
+    "1:2",
+    "one",
+    "2",
+  ]);
+
+  a.stop();
+  b.stop();
+  c.stop();
+  d.stop();
+});
+
 test("effect signal should notify only once", () => {
   let log: string[] = [];
 

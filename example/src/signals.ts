@@ -39,10 +39,13 @@ function markSignalConsumers<T>(
     for (const consumer of consumers) {
       const status = consumer.status;
       const isEffect = consumer instanceof Effect;
-      if (
-        status === DIRTY ||
-        (isEffect && !forceNotify && consumer.pending_notify)
-      ) {
+      if (status === DIRTY) {
+        continue;
+      }
+      if (isEffect && !forceNotify && consumer.pending_notify) {
+        if (consumer !== current_effect && toStatus === DIRTY) {
+          consumer.status = DIRTY;
+        }
         continue;
       }
       consumer.status = toStatus;
