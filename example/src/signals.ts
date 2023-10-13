@@ -349,6 +349,11 @@ export class Effect<T> extends Signal<T> {
   }
 
   start(notify: (signal: Effect<T>) => void): void {
+    if (this.notify !== null) {
+      throw new Error(
+        "Effects that have already started must first be stopped."
+      );
+    }
     this.notify = notify;
   }
 
