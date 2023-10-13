@@ -45,7 +45,7 @@ export function effect<T>(cb: () => void | (() => void)) {
     e.oncleanup = cleanup;
   }
   // Subscribe to future changes to call effect()
-  e.start(enqueueSignal);
+  e.onnotify = enqueueSignal;
   // Return a callback which can be used for cleaning the effect up
-  return () => e.stop();
+  return () => e.dispose();
 }
