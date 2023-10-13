@@ -358,6 +358,11 @@ export class Effect<T> extends Signal<T> {
         "Reading effect signals during the computation phase (from within computed signals) is not permitted."
       );
     }
+    if (this.status === DESTROYED) {
+      throw new Error(
+        "Cannot call get() on effect signals that have already been disposed."
+      );
+    }
     if (isSignalDirty(this)) {
       this.status = CLEAN;
       updateEffectSignal(this);
