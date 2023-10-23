@@ -18,9 +18,11 @@ function flushQueue() {
   for (let i = 0; i < effects.length; i++) {
     const e = effects[i];
     const cleanup = e.get();
-    if (typeof cleanup === 'function') {
-        e.oncleanup = cleanup;
-      }    
+    if (typeof cleanup === "function") {
+      e.oncleanup = cleanup;
+    } else {
+      e.oncleanup = null;
+    }
   }
 }
 
@@ -39,11 +41,11 @@ export function effect<T>(cb: () => void | (() => void)) {
   let e = new Signal.Effect(cb);
   // Run the effect the first time and collect the dependencies
   const cleanup = e.get();
-  if (typeof cleanup === 'function') {
+  if (typeof cleanup === "function") {
     e.oncleanup = cleanup;
   }
   // Subscribe to future changes to call effect()
-  e.start(enqueueSignal);
+  e.onnotify = enqueueSignal;
   // Return a callback which can be used for cleaning the effect up
-  return () => e.stop();
+  return () => e.dispose();
 }

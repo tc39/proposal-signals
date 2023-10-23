@@ -47,13 +47,13 @@ test("effect signal can notify changes", () => {
   const b = new Signal.Computed(() => a.get() * 0);
   const c = new Signal.Effect(() => b.get());
 
-  c.start(() => (is_dirty = true));
+  c.onnotify = () => (is_dirty = true);
 
   c.get();
 
   a.set(1);
 
-  c.stop();
+  c.dispose();
 
   expect(is_dirty).toBe(true);
 
@@ -88,7 +88,7 @@ test("effect signals can be nested", () => {
     log.push("b cleanup " + a.get());
   };
 
-  b.start(() => {});
+  b.onnotify = () => {};
 
   b.get();
 
@@ -98,7 +98,7 @@ test("effect signals can be nested", () => {
 
   a.set(2);
 
-  b.stop();
+  b.dispose();
 
   expect(log).toEqual([
     "b update 0",
@@ -119,7 +119,7 @@ test("effect signal should trigger oncleanup and correctly disconnect from graph
   const b = new Signal.Computed(() => a.get() * 0);
   const c = new Signal.Effect(() => b.get());
 
-  c.start(() => {});
+  c.onnotify = () => {};
   b.oncleanup = () => {
     cleanups.push("b");
   };
@@ -137,7 +137,7 @@ test("effect signal should trigger oncleanup and correctly disconnect from graph
 
   cleanups = [];
 
-  c.stop();
+  c.dispose();
 
   expect(a.consumers?.size).toBe(0);
   expect(b.consumers?.size).toBe(0);
@@ -168,25 +168,25 @@ test("effect signal should propogate correctly with computed signals", () => {
       `${count.get()}:${double.get()}:${triple.get()}:${quintuple.get()}`
     );
   });
-  a.start(queueEffect);
+  a.onnotify = queueEffect;
   a.get();
   const b = new Signal.Effect(() => {
     log.push("three");
     log.push(`${double.get()}:${triple.get()}:${quintuple.get()}`);
   });
-  b.start(queueEffect);
+  b.onnotify = queueEffect;
   b.get();
   const c = new Signal.Effect(() => {
     log.push("two");
     log.push(`${count.get()}:${double.get()}`);
   });
-  c.start(queueEffect);
+  c.onnotify = queueEffect;
   c.get();
   const d = new Signal.Effect(() => {
     log.push("one");
     log.push(`${double.get()}`);
   });
-  d.start(queueEffect);
+  d.onnotify = queueEffect;
   d.get();
 
   expect(log).toEqual([
@@ -202,7 +202,7 @@ test("effect signal should propogate correctly with computed signals", () => {
 
   log = [];
 
-  count.set(1)
+  count.set(1);
   flush();
 
   expect(log).toEqual([
@@ -216,10 +216,10 @@ test("effect signal should propogate correctly with computed signals", () => {
     "2",
   ]);
 
-  a.stop();
-  b.stop();
-  c.stop();
-  d.stop();
+  a.dispose();
+  b.dispose();
+  c.dispose();
+  d.dispose();
 });
 
 test("effect signal should notify only once", () => {
@@ -233,9 +233,9 @@ test("effect signal should notify only once", () => {
     log.push("effect ran");
   });
 
-  c.start(() => {
+  c.onnotify = () => {
     log.push("notified");
-  });
+  };
 
   expect(log).toEqual([]);
 
@@ -248,7 +248,7 @@ test("effect signal should notify only once", () => {
 
   expect(log).toEqual(["effect ran", "notified", "effect ran"]);
 
-  c.stop();
+  c.dispose();
 });
 
 test("https://perf.js.hyoo.ru/#!bench=9h2as6_u0mfnn", () => {
@@ -292,9 +292,9 @@ test("https://perf.js.hyoo.ru/#!bench=9h2as6_u0mfnn", () => {
     res.push(hard(F.get(), "J"));
   });
 
-  H.start(queueEffect);
-  I.start(queueEffect);
-  J.start(queueEffect);
+  H.onnotify = queueEffect;
+  I.onnotify = queueEffect;
+  J.onnotify = queueEffect;
 
   H.get();
   I.get();
@@ -315,7 +315,7 @@ test("https://perf.js.hyoo.ru/#!bench=9h2as6_u0mfnn", () => {
     expect(res).toEqual([3198, 1601, 3195, 1598]);
   }
 
-  H.stop();
-  I.stop();
-  J.stop();
+  H.dispose();
+  I.dispose();
+  J.dispose();
 });

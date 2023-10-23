@@ -150,7 +150,7 @@ function destroySignal<T>(signal: Signal<T>): void {
       oncleanup.call(signal);
     }
     signal.children = null;
-    signal.notify = null;
+    signal.onnotify = null;
   } else if (signal instanceof Computed) {
     removeConsumer(signal, true);
     signal.sources = null;
@@ -254,9 +254,9 @@ function pushChild<T>(target: Effect<T>, child: Signal<T>): void {
 }
 
 function notifyEffect<T>(signal: Effect<T>): void {
-  const notify = signal.notify;
-  if (notify !== null) {
-    notify.call(signal, signal);
+  const onnotify = signal.onnotify;
+  if (onnotify !== null) {
+    onnotify.call(signal, signal);
   }
 }
 
@@ -332,7 +332,7 @@ export class Computed<T> extends Signal<T> {
 export class Effect<T> extends Signal<T> {
   callback: () => T;
   sources: null | Set<Signal<any>>;
-  notify: null | ((signal: Effect<T>) => void);
+  onnotify: null | ((signal: Effect<T>) => void);
   oncleanup: null | (() => void);
   children: null | Signal<any>[];
 
@@ -340,7 +340,7 @@ export class Effect<T> extends Signal<T> {
     super(UNINITIALIZED as T);
     this.callback = callback;
     this.sources = null;
-    this.notify = null;
+    this.onnotify = null;
     this.oncleanup = null;
     this.children = null;
     if (current_effect !== null) {
@@ -348,31 +348,19 @@ export class Effect<T> extends Signal<T> {
     }
   }
 
-  start(notify: (signal: Effect<T>) => void): void {
-    if (this.notify !== null) {
-      throw new Error(
-        "Effects that have already started must first be stopped."
-      );
-    }
-    this.notify = notify;
-  }
-
-  stop(): void {
-    if (this.notify !== null) {
-      removeConsumer(this, true);
-      destroyEffectChildren(this);
-      const oncleanup = this.oncleanup;
-      if (this.value !== UNINITIALIZED && typeof oncleanup === "function") {
-        oncleanup.call(this);
-      }
-    }
-    this.notify = null;
+  dispose(): void {
+    destroySignal(this);
   }
 
   get(): T {
     if (current_consumer instanceof Computed) {
       throw new Error(
         "Reading effect signals during the computation phase (from within computed signals) is not permitted."
+      );
+    }
+    if (this.status === DESTROYED) {
+      throw new Error(
+        "Cannot call get() on effect signals that have already been disposed."
       );
     }
     if (isSignalDirty(this)) {
