@@ -19,9 +19,9 @@ function flushQueue() {
     const e = effects[i];
     const cleanup = e.get();
     if (typeof cleanup === "function") {
-      e.oncleanup = cleanup;
+      e.cleanup = cleanup;
     } else {
-      e.oncleanup = null;
+      e.cleanup = null;
     }
   }
 }
@@ -34,18 +34,18 @@ function enqueueSignal(signal: Effect<any>): void {
   queue.push(signal);
 }
 
-export function effect<T>(cb: () => void | (() => void)) {
+export function effect(cb: () => void | (() => void)) {
   // Create a new computed signal which evalutes to cb, which schedules
   // a read of itself on the microtask queue whenever one of its dependencies
   // might change
-  let e = new Signal.Effect(cb);
+  let e = new Signal.Effect(cb, {
+    notify: enqueueSignal,
+  });
   // Run the effect the first time and collect the dependencies
   const cleanup = e.get();
   if (typeof cleanup === "function") {
-    e.oncleanup = cleanup;
+    e.cleanup = cleanup;
   }
-  // Subscribe to future changes to call effect()
-  e.onnotify = enqueueSignal;
   // Return a callback which can be used for cleaning the effect up
   return () => e.dispose();
 }

@@ -29,6 +29,10 @@ export type ComputedOptions<T> = {
   equals?: (a: T, b: T) => boolean;
 };
 
+export type EffectOptions<T> = {
+  notify?: (signal: Effect<T>) => void;
+};
+
 function markSignalConsumers<T>(
   signal: Signal<T>,
   toStatus: SignalStatus,
@@ -125,10 +129,6 @@ function removeConsumer<T>(
         source instanceof Computed &&
         source.unowned
       ) {
-        const oncleanup = source.oncleanup;
-        if (source.value !== UNINITIALIZED && typeof oncleanup === "function") {
-          oncleanup.call(source);
-        }
         removeConsumer(source, true);
       }
     }
@@ -145,19 +145,15 @@ function destroySignal<T>(signal: Signal<T>): void {
     removeConsumer(signal, true);
     signal.sources = null;
     destroyEffectChildren(signal);
-    const oncleanup = signal.oncleanup;
-    if (value !== UNINITIALIZED && typeof oncleanup === "function") {
-      oncleanup.call(signal);
+    const cleanup = signal.cleanup;
+    if (value !== UNINITIALIZED && typeof cleanup === "function") {
+      cleanup.call(signal);
     }
     signal.children = null;
-    signal.onnotify = null;
+    signal.notify = null;
   } else if (signal instanceof Computed) {
     removeConsumer(signal, true);
     signal.sources = null;
-    const oncleanup = signal.oncleanup;
-    if (typeof oncleanup === "function") {
-      oncleanup.call(signal);
-    }
   }
 }
 
@@ -197,9 +193,11 @@ function executeSignalCallback<T>(signal: Computed<T> | Effect<T>): T {
     current_effect === null && signal instanceof Computed && signal.unowned;
 
   try {
-    const oncleanup = signal.oncleanup;
-    if (signal.value !== UNINITIALIZED && typeof oncleanup === "function") {
-      oncleanup.call(signal);
+    if (signal instanceof Effect) {
+      const cleanup = signal.cleanup;
+      if (signal.value !== UNINITIALIZED && typeof cleanup === "function") {
+        cleanup.call(signal);
+      }
     }
     const value = signal.callback();
     let sources = signal.sources;
@@ -254,9 +252,9 @@ function pushChild<T>(target: Effect<T>, child: Signal<T>): void {
 }
 
 function notifyEffect<T>(signal: Effect<T>): void {
-  const onnotify = signal.onnotify;
-  if (onnotify !== null) {
-    onnotify.call(signal, signal);
+  const notify = signal.notify;
+  if (notify !== null) {
+    notify.call(signal, signal);
   }
 }
 
@@ -289,7 +287,6 @@ export class State<T> extends Signal<T> {
     if (!this.equals.call(this, this.value, value)) {
       this.value = value;
       if (
-        !current_untracking &&
         current_effect !== null &&
         current_effect.consumers === null &&
         current_effect.status === CLEAN
@@ -305,7 +302,6 @@ export class State<T> extends Signal<T> {
 export class Computed<T> extends Signal<T> {
   callback: () => T;
   sources: null | Set<Signal<any>>;
-  oncleanup: null | (() => void);
   unowned: boolean;
 
   constructor(callback: () => T, options?: ComputedOptions<T>) {
@@ -313,7 +309,6 @@ export class Computed<T> extends Signal<T> {
     const unowned = current_effect === null;
     this.callback = callback;
     this.sources = null;
-    this.oncleanup = null;
     this.unowned = unowned;
     if (!unowned) {
       pushChild(current_effect!, this);
@@ -332,16 +327,16 @@ export class Computed<T> extends Signal<T> {
 export class Effect<T> extends Signal<T> {
   callback: () => T;
   sources: null | Set<Signal<any>>;
-  onnotify: null | ((signal: Effect<T>) => void);
-  oncleanup: null | (() => void);
+  notify: null | ((signal: Effect<T>) => void);
+  cleanup: null | (() => void);
   children: null | Signal<any>[];
 
-  constructor(callback: () => T) {
+  constructor(callback: () => T, options?: EffectOptions<T>) {
     super(UNINITIALIZED as T);
     this.callback = callback;
     this.sources = null;
-    this.onnotify = null;
-    this.oncleanup = null;
+    this.notify = options?.notify ?? null;
+    this.cleanup = null;
     this.children = null;
     if (current_effect !== null) {
       pushChild(current_effect, this);

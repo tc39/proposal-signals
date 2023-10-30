@@ -45,9 +45,9 @@ test("effect signal can notify changes", () => {
 
   const a = new Signal.State(0);
   const b = new Signal.Computed(() => a.get() * 0);
-  const c = new Signal.Effect(() => b.get());
-
-  c.onnotify = () => (is_dirty = true);
+  const c = new Signal.Effect(() => b.get(), {
+    notify: () => (is_dirty = true),
+  });
 
   c.get();
 
@@ -74,21 +74,24 @@ test("effect signals can be nested", () => {
   let log: string[] = [];
 
   const a = new Signal.State(0);
-  const b = new Signal.Effect(() => {
-    log.push("b update " + a.get());
-    const c = new Signal.Effect(() => {
-      log.push("c create " + a.get());
-    });
-    c.oncleanup = () => {
-      log.push("c cleanup " + a.get());
-    };
-    c.get();
-  });
-  b.oncleanup = () => {
+  const b = new Signal.Effect(
+    () => {
+      log.push("b update " + a.get());
+      const c = new Signal.Effect(() => {
+        log.push("c create " + a.get());
+      });
+      c.cleanup = () => {
+        log.push("c cleanup " + a.get());
+      };
+      c.get();
+    },
+    {
+      notify: () => {},
+    }
+  );
+  b.cleanup = () => {
     log.push("b cleanup " + a.get());
   };
-
-  b.onnotify = () => {};
 
   b.get();
 
@@ -117,13 +120,11 @@ test("effect signal should trigger oncleanup and correctly disconnect from graph
 
   const a = new Signal.State(0);
   const b = new Signal.Computed(() => a.get() * 0);
-  const c = new Signal.Effect(() => b.get());
+  const c = new Signal.Effect(() => b.get(), {
+    notify: () => {},
+  });
 
-  c.onnotify = () => {};
-  b.oncleanup = () => {
-    cleanups.push("b");
-  };
-  c.oncleanup = () => {
+  c.cleanup = () => {
     cleanups.push("c");
   };
 
@@ -141,7 +142,7 @@ test("effect signal should trigger oncleanup and correctly disconnect from graph
 
   expect(a.consumers?.size).toBe(0);
   expect(b.consumers?.size).toBe(0);
-  expect(cleanups).toEqual(["b", "c"]);
+  expect(cleanups).toEqual(["c"]);
 });
 
 test("effect signal should propogate correctly with computed signals", () => {
@@ -162,31 +163,47 @@ test("effect signal should propogate correctly with computed signals", () => {
   const triple = new Signal.Computed(() => count.get() * 3);
   const quintuple = new Signal.Computed(() => double.get() + triple.get());
 
-  const a = new Signal.Effect(() => {
-    log.push("four");
-    log.push(
-      `${count.get()}:${double.get()}:${triple.get()}:${quintuple.get()}`
-    );
-  });
-  a.onnotify = queueEffect;
+  const a = new Signal.Effect(
+    () => {
+      log.push("four");
+      log.push(
+        `${count.get()}:${double.get()}:${triple.get()}:${quintuple.get()}`
+      );
+    },
+    {
+      notify: queueEffect,
+    }
+  );
   a.get();
-  const b = new Signal.Effect(() => {
-    log.push("three");
-    log.push(`${double.get()}:${triple.get()}:${quintuple.get()}`);
-  });
-  b.onnotify = queueEffect;
+  const b = new Signal.Effect(
+    () => {
+      log.push("three");
+      log.push(`${double.get()}:${triple.get()}:${quintuple.get()}`);
+    },
+    {
+      notify: queueEffect,
+    }
+  );
   b.get();
-  const c = new Signal.Effect(() => {
-    log.push("two");
-    log.push(`${count.get()}:${double.get()}`);
-  });
-  c.onnotify = queueEffect;
+  const c = new Signal.Effect(
+    () => {
+      log.push("two");
+      log.push(`${count.get()}:${double.get()}`);
+    },
+    {
+      notify: queueEffect,
+    }
+  );
   c.get();
-  const d = new Signal.Effect(() => {
-    log.push("one");
-    log.push(`${double.get()}`);
-  });
-  d.onnotify = queueEffect;
+  const d = new Signal.Effect(
+    () => {
+      log.push("one");
+      log.push(`${double.get()}`);
+    },
+    {
+      notify: queueEffect,
+    }
+  );
   d.get();
 
   expect(log).toEqual([
@@ -227,15 +244,18 @@ test("effect signal should notify only once", () => {
 
   const a = new Signal.State(0);
   const b = new Signal.Computed(() => a.get() * 2);
-  const c = new Signal.Effect(() => {
-    a.get();
-    b.get();
-    log.push("effect ran");
-  });
-
-  c.onnotify = () => {
-    log.push("notified");
-  };
+  const c = new Signal.Effect(
+    () => {
+      a.get();
+      b.get();
+      log.push("effect ran");
+    },
+    {
+      notify: () => {
+        log.push("notified");
+      },
+    }
+  );
 
   expect(log).toEqual([]);
 
@@ -282,19 +302,30 @@ test("https://perf.js.hyoo.ru/#!bench=9h2as6_u0mfnn", () => {
   const G = new Signal.Computed(
     () => C.get() + (C.get() || E.get() % 2) + D.get()[0]! + F.get()
   );
-  let H = new Signal.Effect(() => {
-    res.push(hard(G.get(), "H"));
-  });
-  let I = new Signal.Effect(() => {
-    res.push(G.get());
-  });
-  let J = new Signal.Effect(() => {
-    res.push(hard(F.get(), "J"));
-  });
-
-  H.onnotify = queueEffect;
-  I.onnotify = queueEffect;
-  J.onnotify = queueEffect;
+  let H = new Signal.Effect(
+    () => {
+      res.push(hard(G.get(), "H"));
+    },
+    {
+      notify: queueEffect,
+    }
+  );
+  let I = new Signal.Effect(
+    () => {
+      res.push(G.get());
+    },
+    {
+      notify: queueEffect,
+    }
+  );
+  let J = new Signal.Effect(
+    () => {
+      res.push(hard(F.get(), "J"));
+    },
+    {
+      notify: queueEffect,
+    }
+  );
 
   H.get();
   I.get();
