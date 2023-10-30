@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import * as Signal from "./signals";
+import { ExampleFrameworkEffect } from "./effects";
 
 test("state signal can be written and read from", () => {
   const a = new Signal.State(0);
@@ -53,7 +54,7 @@ test("effect signal can notify changes", () => {
 
   a.set(1);
 
-  c.dispose();
+  c[Symbol.dispose]();
 
   expect(is_dirty).toBe(true);
 
@@ -70,28 +71,31 @@ test("effect signal can notify changes", () => {
   expect(is_dirty).toBe(false);
 });
 
-test("effect signals can be nested", () => {
+test("example framework effect signals can be nested", () => {
   let log: string[] = [];
 
   const a = new Signal.State(0);
-  const b = new Signal.Effect(
+  const b = new ExampleFrameworkEffect(
     () => {
       log.push("b update " + a.get());
-      const c = new Signal.Effect(() => {
-        log.push("c create " + a.get());
-      });
-      c.cleanup = () => {
-        log.push("c cleanup " + a.get());
-      };
+      const c = new ExampleFrameworkEffect(
+        () => {
+          log.push("c create " + a.get());
+
+          return () => {
+            log.push("c cleanup " + a.get());
+          };
+        },
+        () => {}
+      );
       c.get();
+
+      return () => {
+        log.push("b cleanup " + a.get());
+      };
     },
-    {
-      notify: () => {},
-    }
+    () => {}
   );
-  b.cleanup = () => {
-    log.push("b cleanup " + a.get());
-  };
 
   b.get();
 
@@ -101,7 +105,7 @@ test("effect signals can be nested", () => {
 
   a.set(2);
 
-  b.dispose();
+  b[Symbol.dispose]();
 
   expect(log).toEqual([
     "b update 0",
@@ -132,16 +136,16 @@ test("effect signal should trigger oncleanup and correctly disconnect from graph
 
   c.get();
 
-  expect(a.consumers?.size).toBe(1);
-  expect(b.consumers?.size).toBe(1);
+  expect(a.sinks?.length).toBe(1);
+  expect(b.sinks?.length).toBe(1);
   expect(cleanups).toEqual([]);
 
   cleanups = [];
 
-  c.dispose();
+  c[Symbol.dispose]();
 
-  expect(a.consumers?.size).toBe(0);
-  expect(b.consumers?.size).toBe(0);
+  expect(a.sinks).toBe(null);
+  expect(b.sinks).toBe(null);
   expect(cleanups).toEqual(["c"]);
 });
 
@@ -233,10 +237,10 @@ test("effect signal should propogate correctly with computed signals", () => {
     "2",
   ]);
 
-  a.dispose();
-  b.dispose();
-  c.dispose();
-  d.dispose();
+  a[Symbol.dispose]();
+  b[Symbol.dispose]();
+  c[Symbol.dispose]();
+  d[Symbol.dispose]();
 });
 
 test("effect signal should notify only once", () => {
@@ -268,7 +272,7 @@ test("effect signal should notify only once", () => {
 
   expect(log).toEqual(["effect ran", "notified", "effect ran"]);
 
-  c.dispose();
+  c[Symbol.dispose]();
 });
 
 test("https://perf.js.hyoo.ru/#!bench=9h2as6_u0mfnn", () => {
@@ -346,7 +350,7 @@ test("https://perf.js.hyoo.ru/#!bench=9h2as6_u0mfnn", () => {
     expect(res).toEqual([3198, 1601, 3195, 1598]);
   }
 
-  H.dispose();
-  I.dispose();
-  J.dispose();
+  H[Symbol.dispose]();
+  I[Symbol.dispose]();
+  J[Symbol.dispose]();
 });

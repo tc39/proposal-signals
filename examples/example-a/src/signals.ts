@@ -5,15 +5,16 @@ const DESTROYED = 3;
 
 const UNINITIALIZED = Symbol();
 
-let current_consumer: null | Computed<any> | Effect<any> = null;
+let current_sink: null | Computed<any> | Effect<any> = null;
 let current_effect: null | Effect<any> = null;
-let current_sources: null | Set<Signal<any>> = null;
+let current_sources: null | Signal<any>[] = null;
+let current_sources_index = 0;
 let current_untracking = false;
-// To prevent leaking when accumulating consumers during computed.get(),
-// we can track unowned computed signals and skip their consumers
+// To prevent leaking when accumulating sinks during computed.get(),
+// we can track unowned computed signals and skip their sinks
 // accordingly in the cases where there's no current parent effect
 // when reading the computed via computed.get().
-let current_skip_consumer = false;
+let current_skip_sink = false;
 
 type SignalStatus =
   | typeof DIRTY
@@ -31,30 +32,31 @@ export type ComputedOptions<T> = {
 
 export type EffectOptions<T> = {
   notify?: (signal: Effect<T>) => void;
+  cleanup?: (signal: Effect<T>) => void;
 };
 
-function markSignalConsumers<T>(
+function markSignalSinks<T>(
   signal: Signal<T>,
   toStatus: SignalStatus,
   forceNotify: boolean
 ): void {
-  const consumers = signal.consumers;
-  if (consumers !== null) {
-    for (const consumer of consumers) {
-      const status = consumer.status;
-      const isEffect = consumer instanceof Effect;
+  const sinks = signal.sinks;
+  if (sinks !== null) {
+    for (const sink of sinks) {
+      const status = sink.status;
+      const isEffect = sink instanceof Effect;
       if (
         status === DIRTY ||
-        (isEffect && !forceNotify && consumer === current_effect)
+        (isEffect && !forceNotify && sink === current_effect)
       ) {
         continue;
       }
-      consumer.status = toStatus;
+      sink.status = toStatus;
       if (status === CLEAN) {
         if (isEffect) {
-          notifyEffect(consumer);
+          notifyEffect(sink);
         } else {
-          markSignalConsumers(consumer, MAYBE_DIRTY, forceNotify);
+          markSignalSinks(sink, MAYBE_DIRTY, forceNotify);
         }
       }
     }
@@ -65,7 +67,6 @@ function updateEffectSignal<T>(signal: Effect<T>): void {
   const previous_effect = current_effect;
   current_effect = signal;
   try {
-    destroyEffectChildren(signal);
     signal.value = executeSignalCallback(signal);
   } finally {
     current_effect = previous_effect;
@@ -110,26 +111,35 @@ function isSignalDirty<T>(signal: Computed<T> | Effect<T>): boolean {
   return false;
 }
 
-function removeConsumer<T>(
+function removeSink<T>(
   signal: Computed<T> | Effect<T>,
+  startIndex: number,
   removeUnowned: boolean
 ): void {
   const sources = signal.sources;
   if (sources !== null) {
-    for (const source of sources) {
-      const consumers = source.consumers;
-      let consumers_size = 0;
-      if (consumers !== null) {
-        consumers_size = consumers.size - 1;
-        consumers.delete(signal);
+    for (let i = startIndex; i < sources.length; i++) {
+      const source = sources[i];
+      const sinks = source.sinks;
+      let sinksSize = 0;
+      if (sinks !== null) {
+        sinksSize = sinks.length - 1;
+        if (sinksSize === 0) {
+          source.sinks = null;
+        } else {
+          const index = sinks.indexOf(signal);
+          // Swap with last element and then remove.
+          sinks[index] = sinks[sinksSize];
+          sinks.pop();
+        }
       }
       if (
         removeUnowned &&
-        consumers_size === 0 &&
+        sinksSize === 0 &&
         source instanceof Computed &&
         source.unowned
       ) {
-        removeConsumer(source, true);
+        removeSink(source, 0, true);
       }
     }
   }
@@ -140,30 +150,19 @@ function destroySignal<T>(signal: Signal<T>): void {
   signal.status = DESTROYED;
   signal.value = UNINITIALIZED as T;
   signal.equals = Object.is;
-  signal.consumers = null;
+  signal.sinks = null;
   if (signal instanceof Effect) {
-    removeConsumer(signal, true);
+    removeSink(signal, 0, true);
     signal.sources = null;
-    destroyEffectChildren(signal);
     const cleanup = signal.cleanup;
     if (value !== UNINITIALIZED && typeof cleanup === "function") {
       cleanup.call(signal);
     }
-    signal.children = null;
+    signal.cleanup = null;
     signal.notify = null;
   } else if (signal instanceof Computed) {
-    removeConsumer(signal, true);
+    removeSink(signal, 0, true);
     signal.sources = null;
-  }
-}
-
-function destroyEffectChildren<V>(signal: Effect<V>): void {
-  const children = signal.children;
-  signal.children = null;
-  if (children !== null) {
-    for (let i = 0; i < children.length; i++) {
-      destroySignal(children[i]);
-    }
   }
 }
 
@@ -172,59 +171,66 @@ function updateComputedSignal<T>(
   forceNotify: boolean
 ): void {
   signal.status =
-    current_skip_consumer || (current_effect === null && signal.unowned)
+    current_skip_sink || (current_effect === null && signal.unowned)
       ? DIRTY
       : CLEAN;
   const value = executeSignalCallback(signal);
   const equals = signal.equals!;
   if (!equals.call(signal, signal.value, value)) {
     signal.value = value;
-    markSignalConsumers(signal, DIRTY, forceNotify);
+    markSignalSinks(signal, DIRTY, forceNotify);
   }
 }
 
 function executeSignalCallback<T>(signal: Computed<T> | Effect<T>): T {
   const previous_sources = current_sources;
-  const previous_consumer = current_consumer;
-  const previous_skip_consumer = current_skip_consumer;
-  current_sources = null;
-  current_consumer = signal;
-  current_skip_consumer =
-    current_effect === null && signal instanceof Computed && signal.unowned;
+  const previous_sink = current_sink;
+  const previous_sources_index = current_sources_index;
+  const previous_skip_sink = current_skip_sink;
+  const is_unowned = signal instanceof Computed && signal.unowned;
+  current_sources = null as null | Signal<any>[];
+  current_sources_index = 0;
+  current_sink = signal;
+  current_skip_sink = current_effect === null && is_unowned;
 
   try {
-    if (signal instanceof Effect) {
-      const cleanup = signal.cleanup;
-      if (signal.value !== UNINITIALIZED && typeof cleanup === "function") {
-        cleanup.call(signal);
-      }
-    }
     const value = signal.callback();
     let sources = signal.sources;
 
     if (current_sources !== null) {
-      removeConsumer(signal, false);
-      signal.sources = sources = current_sources as Set<Signal<any>>;
+      removeSink(signal, current_sources_index, false);
 
-      if (!current_skip_consumer) {
-        for (const source of sources) {
-          if (source.consumers === null) {
-            source.consumers = new Set([signal]);
+      if (sources !== null && current_sources_index > 0) {
+        sources.length = current_sources_index + current_sources.length;
+        for (let i = 0; i < current_sources.length; i++) {
+          sources[current_sources_index + i] = current_sources[i];
+        }
+      } else {
+        signal.sources = sources = current_sources;
+      }
+
+      if (!current_skip_sink) {
+        for (let i = current_sources_index; i < sources.length; i++) {
+          const source = sources[i];
+
+          if (source.sinks === null) {
+            source.sinks = [signal];
           } else {
-            source.consumers.add(signal);
+            source.sinks.push(signal);
           }
         }
       }
-    } else if (sources !== null) {
-      removeConsumer(signal, false);
-      sources.clear();
+    } else if (sources !== null && current_sources_index < sources.length) {
+      removeSink(signal, current_sources_index, false);
+      sources.length = current_sources_index;
     }
 
-    return value;
+    return value as T;
   } finally {
     current_sources = previous_sources;
-    current_consumer = previous_consumer;
-    current_skip_consumer = previous_skip_consumer;
+    current_sources_index = previous_sources_index;
+    current_sink = previous_sink;
+    current_skip_sink = previous_skip_sink;
   }
 }
 
@@ -232,22 +238,25 @@ function updateSignalSources<T>(signal: Signal<T>): void {
   if (signal.status === DESTROYED) {
     return;
   }
-  // Register the source on the current consumer signal.
-  if (current_consumer !== null && !current_untracking) {
-    if (current_sources === null) {
-      current_sources = new Set([signal]);
-    } else if (!current_sources.has(signal)) {
-      current_sources.add(signal);
+  // Register the source on the current sink signal.
+  if (current_sink !== null && !current_untracking) {
+    const sources = current_sink.sources;
+    if (
+      current_sources === null &&
+      sources !== null &&
+      sources[current_sources_index] === signal &&
+      !(
+        current_sink instanceof Computed &&
+        current_sink.unowned &&
+        current_effect
+      )
+    ) {
+      current_sources_index++;
+    } else if (current_sources === null) {
+      current_sources = [signal];
+    } else {
+      current_sources.push(signal);
     }
-  }
-}
-
-function pushChild<T>(target: Effect<T>, child: Signal<T>): void {
-  const children = target.children;
-  if (children === null) {
-    target.children = [child];
-  } else {
-    children.push(child);
   }
 }
 
@@ -259,13 +268,13 @@ function notifyEffect<T>(signal: Effect<T>): void {
 }
 
 class Signal<T> {
-  consumers: null | Set<Computed<any> | Effect<any>>;
+  sinks: null | Array<Computed<any> | Effect<any>>;
   equals: (a: T, b: T) => boolean;
   status: SignalStatus;
   value: T;
 
   constructor(value: T, options?: StateOptions<T>) {
-    this.consumers = null;
+    this.sinks = null;
     this.equals = options?.equals || Object.is;
     this.status = DIRTY;
     this.value = value;
@@ -279,7 +288,7 @@ class Signal<T> {
 
 export class State<T> extends Signal<T> {
   set(value: T): void {
-    if (!current_untracking && current_consumer instanceof Computed) {
+    if (!current_untracking && current_sink instanceof Computed) {
       throw new Error(
         "Writing to state signals during the computation phase (from within computed signals) is not permitted."
       );
@@ -288,22 +297,22 @@ export class State<T> extends Signal<T> {
       this.value = value;
       if (
         current_effect !== null &&
-        current_effect.consumers === null &&
+        current_effect.sinks === null &&
         current_effect.status === CLEAN &&
         current_sources !== null &&
-        current_sources.has(this)
+        current_sources.includes(this)
       ) {
         current_effect.status = DIRTY;
         notifyEffect(current_effect);
       }
-      markSignalConsumers(this, DIRTY, true);
+      markSignalSinks(this, DIRTY, true);
     }
   }
 }
 
 export class Computed<T> extends Signal<T> {
   callback: () => T;
-  sources: null | Set<Signal<any>>;
+  sources: null | Signal<any>[];
   unowned: boolean;
 
   constructor(callback: () => T, options?: ComputedOptions<T>) {
@@ -312,9 +321,6 @@ export class Computed<T> extends Signal<T> {
     this.callback = callback;
     this.sources = null;
     this.unowned = unowned;
-    if (!unowned) {
-      pushChild(current_effect!, this);
-    }
   }
 
   get(): T {
@@ -327,30 +333,27 @@ export class Computed<T> extends Signal<T> {
 }
 
 export class Effect<T> extends Signal<T> {
-  callback: () => T;
-  sources: null | Set<Signal<any>>;
+  callback: () => void;
+  sources: null | Signal<any>[];
   notify: null | ((signal: Effect<T>) => void);
-  cleanup: null | (() => void);
-  children: null | Signal<any>[];
+  cleanup: null | ((signal: Effect<T>) => void);
 
-  constructor(callback: () => T, options?: EffectOptions<T>) {
+  constructor(callback: () => void, options?: EffectOptions<T>) {
     super(UNINITIALIZED as T);
     this.callback = callback;
     this.sources = null;
     this.notify = options?.notify ?? null;
-    this.cleanup = null;
-    this.children = null;
-    if (current_effect !== null) {
-      pushChild(current_effect, this);
+    this.cleanup = options?.cleanup ?? null;
+  }
+
+  [Symbol.dispose]() {
+    if (this.status !== DESTROYED) {
+      destroySignal(this);
     }
   }
 
-  dispose(): void {
-    destroySignal(this);
-  }
-
   get(): T {
-    if (current_consumer instanceof Computed) {
+    if (current_sink instanceof Computed) {
       throw new Error(
         "Reading effect signals during the computation phase (from within computed signals) is not permitted."
       );
@@ -381,3 +384,7 @@ function untrack<T>(fn: () => T): T {
 export const unsafe = {
   untrack,
 };
+
+export function getActiveEffect<T>(): null | Effect<T> {
+  return current_effect;
+}

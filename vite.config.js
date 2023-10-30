@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-    root: 'example',
+    root: 'examples/example-a',
 })
