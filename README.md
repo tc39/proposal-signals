@@ -169,8 +169,9 @@ It turns out that existing Signal libraries are not all that different from each
     * If a feature matches with an ecosystem concept, using common vocabulary is good.
         * However, important to not literally shadow the exact same names!
     * Tension between "usability by JS devs" and "providing all the hooks to frameworks"
-        * Idea: Provide all the hooks, but name them such that it's more clear that they aren't for ordinary JS programmers, and include errors when misused if possible.
-        * TODO: Are `effect`/`startEffects`/`stopEffects` appropriate names?
+        * Idea: Provide all the hooks, but include errors when misused if possible.
+        * Idea: Indicate in some names when things are unsafe (in particular `untrack`).
+        * TODO: Should more names be made more obscure to indicate badness? Are the names around `Signal.Effect` appropriate?
 
 ### Memory management
 
@@ -209,12 +210,14 @@ namespace Signal {
     class Computed<T> extends Signal<T> {
         // Create a Signal which evaluates to the value of cb.call(the Signal)
         constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
+    }
 
-        // Subscribe to options.effect for when a (recursive) source changes
-        startEffects();
+    class Effect extends Signal<void> {
+        // When a (recursive) source of cb changes, call schedule, to rerun cb
+        constructor(cb: (this: Effect) => void, schedule: EffectOptions);
 
-        // Unsubscribe to options.effect
-        stopEffects();
+        // Stop scheduling this signal, even if a dependency of cb changes
+        [Symbol.dispose]();
     }
 
     namespace unsafe {
@@ -230,11 +233,8 @@ interface SignalOptions<T> {
     equals?: SignalComparison<T>;
 }
 
-type SignalEffect<T> = (this: Signal<T>) => void;
-
-interface ComputedOptions<T> extends SignalOptions<T> {
-    // For effects: call synchronously when a (recursive) source changes
-    effect?: SignalEffect<T>;
+interface EffectOptions {
+    notify: (this: Effect) => void;
 }
 ```
 
@@ -255,7 +255,7 @@ Computed Signals track their dependencies dynamically--each time they are run, t
 Unlike JavaScript Promises, everything in Signals runs synchronously:
 - Setting a Signal to a new value is synchronous, and this is immediately reflected when reading any computed Signal which depends on it afterwards. There is no built-in batching of this mutation.
 - Reading computed Signals is synchronous--their value is always available.
-- The `effect` callback, used to implement effects, as explained below, runs synchronously, during the `.set()` call which triggered it (but after graph coloring has completed).
+- The `notify` callback in Effects, as explained below, runs synchronously, during the `.set()` call which triggered it (but after graph coloring has completed).
 
 Like Promises, Signals can represent an error state: If a computed Signal's callback throws, then that error is cached just like another value, and rethrown every time the Signal is read.
 
@@ -264,54 +264,57 @@ Like Promises, Signals can represent an error state: If a computed Signal's call
 A `Signal` instance represents the capability to read a dynamically changing value whose updates are tracked over time. It also implicitly includes the capability to subscribe to the Signal, implicitly through a tracked access from another computed Signal.
 
 The API here is designed to match the very rough ecosystem consensus among a large fraction of Signal libraries:
-- Access is through calls to `get`, e.g., `mySignal.get()` (both for computed and state). [Note: the other half of the Signal world uses `.value`-style accessors, and we could switch to that if desired.]
-- Names "state", "computed" and "Signal" itself are chosen to match names used elsewhere.
+- Access is through calls to `get`, e.g., `mySignal.get()` (both for computed and state). [Note: this disagrees with all popular signal APIs, which either use a `.value`-style accessor, or `signal()` call syntax.]
+- Names "state", "computed", "effect" and "Signal" itself are chosen to match names used elsewhere.
 
 The API is designed to reduce the number of allocations, to make Signals suitable for embedding in JavaScript frameworks while reaching same or better performance than existing framework-customized Signals. This implies:
 - Writable state Signals are a single object, which can be accessed and set in one. (See implications below in the "Capability separation" section.)
-- Both state and computed Signals are designed to be subclassable, to facilitate frameworks' ability to add additional properties through public and private class fields (as well as methods for using that state).
-- The `effect` callback is called on just one Signal; no surrounding event or array-based data structure surrounds it.
-- Various callbacks (equals, effect, the computed callback) are called with the appropriate `this`, so that a new closure isn't needed per Signal.
+- Both state, computed and effect Signals are designed to be subclassable, to facilitate frameworks' ability to add additional properties through public and private class fields (as well as methods for using that state).
+- Effects' `notify` callback is called on just one Signal; no surrounding event or array-based data structure surrounds it.
+- Various callbacks (`equals`, `notify`, the computed callback) are called with the appropriate `this`, so that a new closure isn't needed per Signal.
 
 Some error conditions enforced by this API:
-- Setting state after getting it within the same computed throws.
+- Setting any state within any computed throws.
 - It is an error to read a computed recursively.
+- The `notify` callback of an Effect cannot read or write any signals
 - If a computed Signal's callback throws, then subsequent accesses of the Signal rethrow that cached error, until one of the dependencies changes and it is recalculated.
+- Effect signals must be treated as reads, and cannot be read during a computed signal.
 
 ### Implementing effects
 
-The `effect`/`startEffects`/`stopEffects` interface defined above gives the basis for implementing "effects": callbacks which are re-run when other Signals change, purely for their side effect. A computed Signal where an `effect` option was provided is called an "effect Signal". The `effect` function used above in the initial example can be defined as follows:
+The `Effect` interface defined above gives the basis for implementing typical JS APIs for effects: callbacks which are re-run when other Signals change, purely for their side effect. The `effect` function used above in the initial example can be defined as follows:
 
 ```ts
 // This function would usually live in a library/framework, not application code
 // NOTE: This scheduling logic is too basic to be useful. Do not copy/paste.
-function effect(cb) {
-    // Create a new computed Signal which evaluates to cb, which schedules
-    // a read of itself on the microtask queue whenever one of its dependencies
-    // might change
-    let e = new Signal.Computed(cb, { effect() { queueMicrotask(this); } });
-    // Run the effect the first time and collect the dependencies
-    e.get();
-    // Subscribe to future changes to call effect()
-    e.startEffects();
-    // Return a callback which can be used for cleaning the effect up
-    return () => e.stopEffects();
+
+// An effect effect Signal which evaluates to cb, which schedules a read of
+// itself on the microtask queue whenever one of its dependencies might change
+class SimpleEffect extends Signal.Effect {
+    static #options = { notify() { queueMicrotask(() => this.get()); };
+    constructor(cb) {
+        super(cb, SimpleEffect.#options);
+        // Run for the first time to subscribe to sources
+        this.#options.notify.call(this);
+    }
+}
+
+export function effect(cb) {
+    return new SimpleEffect(cb);
 }
 ```
 
 The Signal API does not include any built-in function like `effect`. This is because effect scheduling is subtle and often ties into framework rendering cycles and other high-level framework-specific state or strategies which JS does not have access to.
 
-Walking through the different operations used here: The `effect` callback passed into the computed Signal constructor is the function that is called (during the range between a `.startEffects()` and `.stopEffects()` call) when the Signal goes from a "clean" state (where we know the cache is initialized and valid) into a "checked" or "dirty" state (where the cache might or might not be valid because at least one of the states which this recursively depends on has been changed).
+Walking through the different operations used here: The `notify` callback passed into the computed Signal constructor is the function that is called when the Signal goes from a "clean" state (where we know the cache is initialized and valid) into a "checked" or "dirty" state (where the cache might or might not be valid because at least one of the states which this recursively depends on has been changed).
 
-Calls to `effect` are ultimately triggered by a call to `.set()` on some state Signal. This call is synchronous: it happens before `.set` returns. But there's no need to worry about this callback observing the Signal graph in a half-processed state, because during a `effect` callback, no Signal can be read or written, even in an `untrack` call. Because `effect` is called during `.set()`, it is interrupting another thread of logic, which might not be complete. To read or write Signals from `effect`, schedule work to run later, e.g., by writing the Signal down in a list to later be accessed, or with `queueMicrotask` as above.
+Calls to `notify` are ultimately triggered by a call to `.set()` on some state Signal. This call is synchronous: it happens before `.set` returns. But there's no need to worry about this callback observing the Signal graph in a half-processed state, because during a `notify` callback, no Signal can be read or written, even in an `untrack` call. Because `notify` is called during `.set()`, it is interrupting another thread of logic, which might not be complete. To read or write Signals from `notify`, schedule work to run later, e.g., by writing the Signal down in a list to later be accessed, or with `queueMicrotask` as above.
 
-To avoid mistakes, an error is thrown if `.startEffects()` or `.stopEffects()` are called when no `effect` callback had been passed to the computed Signal constructor.
+Note that it is perfectly possible to use Signals effectively without `Symbol.Effect` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
 
-Note that it is perfectly possible to use Signals effectively without `effect`/`stopEffects`/`startEffects`, implementing effects by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
+Both computed and state Signals are garbage-collected like any JS values. But effect Signals have a special way of holding things alive: If an effect Signal has had `.get()` called on it, then any computed Signals that the effect references will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `[Symbol.dispose]` to clean up effects.
 
-Both computed and state Signals are garbage-collected like any JS values. When `.startEffects()` has not yet been called, a computed Signal will hold alive the Signals that it references, but not vice versa. However, after `.startEffects()` and before `.stopEffects()`, the computed Signal *will* be held alive by any state Signals which it (recursively) references, since this may trigger a future `.effect()` call for its side effect. For this reason, remember to call `.stopEffects()` when cleaning up effects.
-
-> TODO: Investigate whether this GC guarantee is implementable without too much overhead
+> TODO: Investigate whether automatic GC of computed Signals which are not referenced by effects is implementable without too much overhead
 
 ### An unsound escape hatch
 
@@ -328,6 +331,7 @@ The above API provides a sort of Minimum Viable Product for Signals which enable
 - For incremental hydration/resumability: a Signal which can be created with a fixed value and later transformed into a computed Signal
 - For handling asynchronicity: A "loading" state of Signals which propagates automatically through the dependency graph, allowing a React Suspense-like system to be created
 - For state management: A single object which represents state and processes for updating it, including lifecycle events which simplify ownership management
+- For interoperable ownership: When one effect is nested inside of another, automatically dispose the inner effect when the outer one is reevaluated or disposed (and provide extra hooks to use this mechanism flexibly).
 
 TODO: Link to more detailed resources investigating each of these
  
@@ -347,32 +351,32 @@ The collaborators on the Signal proposal want to be especially conservative in h
 This section describes each of the APIs exposed to JavaScript, in terms of the algorithms that they implement. This can be thought of as a proto-specification, and is included at this early point to nail down one possible set of semantics, while being very open to changes.
 
 Some aspects of the algorithm:
-- The order of reads of Signals within a computed is significant, and is observable in the order that three types of callbacks (`effect`, `equals` and `new Signal.Computed`) are executed. This means that the sources of a computed Signal must be stored as an ordered set, with duplicates removed.
-- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For `effect`, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
-- The data structures are heavily circular, and some use of WeakRefs (for the sets representing sinks?) would be required to enable automatic garbage collection of non-effect computed Signals when the other parts of the graph remain alive.
+- The order of reads of Signals within a computed is significant, and is observable in the order that three types of callbacks (`notify`, `equals` and the first parameter to `new Signal.Computed`/`new Signal.Effect`) are executed. This means that the sources of a computed Signal must be stored as an ordered set, with duplicates removed.
+- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For `notify`, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
+- The data structures are heavily circular, and some changes would be required to enable automatic garbage collection of non-effect computed Signals when the other parts of the graph remain alive. (*TODO* make these changes once we find the right algorithm, if possible.)
 
 ### Hidden global state 
 
 Signal algorithms need to reference certain global state. In JavaScript specification terms, we refer to these as fields of the execution context.
 
-- `computing`: A computed Signal currently being reevaluated due to a `.get` call, or `undefined`. Initially `undefined`.
-- `notifying`: Boolean denoting whether there is an `effect` callback currently executing. Initially `false`.
+- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` call, or `undefined`. Initially `undefined`.
+- `notifying`: Boolean denoting whether there is an `notify` callback currently executing. Initially `false`.
 
 ### The `Signal` class
 
 `Signal` is an abstract class whose constructor throws. All Signals are either state Signals or computed Signals. They have a common structure and `get` algorithm, described below.
 
-#### Common hidden fields
+#### Hidden fields
 
-- `value`: The previous cached value of the Signal, or `~uninitialized~` for a never-read computed Signal. The value may be an exception which gets rethrown when the value is read.
-- `state`: May be `~clean~`, `~checked~` or `~dirty~`. State Signals are always `~clean~`.
+- `value`: The previous cached value of the Signal, or `~uninitialized~` for a never-read computed Signal. The value may be an exception which gets rethrown when the value is read. Always `undefined` for effect signals.
+- `state`: May be `~clean~`, `~checked~`, `~computing~`, `~disposed~` or `~dirty~`. State Signals are always `~clean~`. Only effects go into the `~disposed~` state.
 - `sources`: An ordered set of Signals which this Signal depends on. For state Signals, this will be the empty set.
-- `sinks`: An ordered set of Signals which depend on this Signal. These will all be computed Signals.
+- `sinks`: An ordered set of Signals which depend on this Signal. For effect signals, this will be the empty set.
 - `equals`: The equals method provided in the options, defaulting to `Object.is`.
 
 #### Method: `Signal.prototype.get`
 
-1. If the current execution context is `notifying` or if this Signal is `recalculating`, throw an exception.
+1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computed` is not undefined, throw an exception.
 1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
     1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
@@ -383,11 +387,12 @@ Signal algorithms need to reference certain global state. In JavaScript specific
 
 1. Clear out this Signal's `sources` set, and remove it from those sources' `sinks` sets.
 1. Save the previous `computing` value and set `computing` to this Signal.
-1. Set this Signal's `recalculating` to true.
+1. Set this Signal's state to `~computing~`.
 1. Run this computed Signal's callback, using this Signal as the this value. Save the return value, and if the callback threw an exception, store that for rethrowing.
 1. Set this Signal's `recalculating` to false.
 1. Restore the previous `computing` value.
 1. Apply the "set Signal value" algorithm to the callback's return value.
+2. Set this Signal's state to `~clean~`.
 1. If that algorithm returned `~dirty~`: mark all sinks of this Signal as `~dirty~` (previously, the sinks may have been a mix of checked and dirty).
 1. Otherwise, that algorithm returned `~clean~`: In this case, for each `~checked~` sink of this Signal, if all of that Signal's sources are now clean, then mark that Signal as `~clean~` as well. Apply this cleanup step to further sinks recursively, to any newly clean Signals which have checked sinks.
 
@@ -397,14 +402,14 @@ The constructor sets `value` to its parameter, `equals` based on options, and `s
 
 #### Method: `Signal.State.prototype.set`
 
-1. If the current execution context is `notifying` or if this Signal is in the execution context's `computing` Signal's `sources` list [TODO: what about nested computeds? how does untrack relate to this?], throw an exception.
+1. If the current execution context is `notifying` or if this Signal is in the execution context's `computing` is a computed Signal, throw an exception.
 1. Run the "set Signal value" algorithm with this Signal and the first parameter for the value.
 1. If that algorithm returned `~clean~`, then return undefined.
 1. Set the `state` of all `sinks` of this Signal to `~dirty~` if they weren't already dirty.
-1. Set the `state` of all of the sinks' dependencies (recursively) to `~checked~` if they weren't already dirty or checked (that is, leave dirty markings in place).
-1. For each Signal newly set to `~dirty~` or `~checked~`, if they have `necessary` set to true, then in depth-first order,
-    1. Set `notifying` to true while calling their `effect` method (saving aside any exception thrown, but ignoring the return value of `effect`), and then restore `notifying` to false.
-1. If any exception was thrown from the `effect` callbacks, propagate it to the caller after all `effect` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
+1. Set the `state` of all of the sinks' dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place).
+1. For each `~clean~` effect Signal encountered in that recursive search, if the Signal is not in the `~disposed~` state, then in depth-first order,
+    1. Set `notifying` to true while calling their `notify` method (saving aside any exception thrown, but ignoring the return value of `notify`), and then restore `notifying` to false.
+1. If any exception was thrown from the `notify` callbacks, propagate it to the caller after all `notify` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
 1. Return undefined.
 
 ##### Set Signal value algorithm
@@ -417,32 +422,40 @@ The constructor sets `value` to its parameter, `equals` based on options, and `s
 
 ### The `Signal.Computed` class
 
-The constructor sets
-- `callback` to its first parameter
-- `equals` and `effect` based on options
-- `necessary` and `recalculating` to false
-- `state` to `~dirty~`
-- `value` to `~uninitialized~`
-
 #### Additional hidden fields
 
 - `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
-- `effect`: The callback called when the Signal goes into a `~checked~` state, or undefined.
-- `necessary`: Boolean indicating whether this Signal is currently started. Initially set to false on construction.
-- `recalculating`: A boolean indicating whether this Signal is being recomputed due to a `.get()`, initially false.
 
-#### Method: `Signal.Computed.prototype.startEffects()`
+#### Constructor
 
-1. If this Signal's `effect` is undefined, or if `necessary` is already true, throw an exception.
-1. Set `necessary` to true.
-1. If this Signal's `state` is `~dirty~` or `~checked~`, then call the effect function (propagating any exception, but ignoring the return value).
-1. Return undefined
+The constructor sets
+- `callback` to its first parameter
+- `equals` based on options
+- `state` to `~dirty~`
+- `value` to `~uninitialized~`
 
-#### Method: `Signal.Computed.prototype.stopEffects()`
+### The `Signal.Effect` class
 
-1. If this Signal's `effect` is undefined, or if `necessary` is already false, throw an exception.
-1. Set `necessary` to false.
-1. Return undefined
+#### Additional hidden fields
+
+- `callback`: The callback to execute the effect
+- `notify`: The callback called when a dependency changes
+
+#### Constructor
+
+1. `callback` is set to a function wrapping its first parameter:
+   1. If this signal's `state` is `~disposed~` return undefined.
+   1. Call the function
+   1. Return undefined.
+1. `equals` can remain its default `Object.is`--there is no caching for effects, but they also don't notify anyone downstream since sinks is always empty, so it doesn't matter.
+1. `state` is set to `~dirty~`.
+1. `value is set to undefined.
+1. `notify` is set to the callback in the options.
+
+#### [Symbol.dispose]
+
+1. Set `state` to `~disposed~`.
+1. Remove the effect Signal from the graph by deleting it from all of its sources' sinks list, as well as setting its own sources list to the empty set.
 
 ### `Signal.unsafe.untrack(cb)`
 
@@ -451,6 +464,8 @@ The constructor sets
 1. Call `cb`.
 1. Restore `computing` to c (even if `cb` threw an exception).
 1. Return the return value of `cb` (rethrowing any exception).
+
+Note: untrack doesn't get you out of the `notifying` state, which is maintained strictly.
 
 ## FAQ
 **Q**: Is it a good idea to enable application state which is distributed, rather than at the component level or at the top level of the application?
@@ -469,11 +484,11 @@ The constructor sets
 
 **Q**: Is the Signal API meant to be used directly by application developers, or wrapped by frameworks?
 
-**A**: The design is intended to fit either. The core functionality (state and computed constructors, reading and writing Signals) is designed to be similar to existing popular Signal implementations. On the other hand, features like `untrack` and `effect` are more error-prone and should probably be left to libraries and frameworks. Frameworks provide many other important features, such as managing ownership and disposal, and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems. Some frameworks may put a different skin around `Signal.State` and `Signal.Computed` for ergonomic reasons.
+**A**: The design is intended to fit either. The core functionality (state and computed constructors, reading and writing Signals) is designed to be similar to existing popular Signal implementations. On the other hand, features like `untrack` and `Signal.Effect` are more error-prone and should probably be left to libraries and frameworks. Frameworks provide many other important features, such as managing ownership and disposal, and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems. Some frameworks may put a different skin around `Signal.State` and `Signal.Computed` for ergonomic reasons.
 
 **Q**: Do I have to tear down Signals related to a widget when that widget is destroyed? What is the API for that?
 
-**A**: The relevant teardown operation here is `Signal.computed.prototype.stopEffects`, for Signals with a `effect` callback. "Pure" computed Signals without a `effect` callback do not need to be cleaned up.
+**A**: The relevant teardown operation here is `Signal.Effect.prototype[Symbol.dispose]`. Only effect Signals need to be cleaned up, not computed Signals or state Signals--those can be garbage-collected automatically.
 
 **Q**: Do Signals work with VDOM, or directly with the underlying HTML DOM?
 
@@ -495,7 +510,7 @@ The constructor sets
 
 **Q**: Are Signals push-based or pull-based?
 
-**A**: Evaluation of computed Signals is pull-based: computed Signals are only evaluated when they are read, even if the underlying state changed. At the same time, changing state eagerly pushes cache invalidation to computed Signals which depend on it, potentially triggering a `effect` callback. So Signals may be thought of as a "push-pull" construction.
+**A**: Evaluation of computed Signals is pull-based: computed Signals are only evaluated when they are read, even if the underlying state changed. At the same time, changing state eagerly pushes cache invalidation to computed Signals which depend on it, potentially triggering a `notify` callback. So Signals may be thought of as a "push-pull" construction.
 
 **Q**: Do Signals introduce nondeterminism into JavaScript execution?
 
@@ -503,7 +518,7 @@ The constructor sets
 
 **Q**: When I write to a state Signal, when is the update to the computed Signal scheduled?
 
-**A**: It isn't scheduled! The computed Signal will recalculate itself the next time someone reads it. Synchronously, an `effect` callback may be called, enabling frameworks to schedule a read at the time that they find appropriate.
+**A**: It isn't scheduled! The computed Signal will recalculate itself the next time someone reads it. Synchronously, a `notify` callback may be called, enabling frameworks to schedule a read at the time that they find appropriate.
 
 **Q**: When do writes to state Signals take effect? Immediately, or are they batched?
 
@@ -525,15 +540,15 @@ The constructor sets
 
 **Q**: Why doesn't this proposal include an `effect()` function, when effects are necessary for any practical usage of Signals?
 
-**A**: Effects inherently tie into scheduling and disposal, which are managed by frameworks and outside the scope of this proposal. Instead, this proposal includes the basis for implementing effects through the `effect`/`startEffects`/`stopEffects` API.
+**A**: Effects inherently tie into scheduling and disposal, which are managed by frameworks and outside the scope of this proposal. Instead, this proposal includes the basis for implementing effects through the more low-level `Signal.Effect` API.
 
 **Q**: Why are subscriptions automatic rather than providing a manual interface?
 
 **A**: Experience has shown that manual subscription interfaces for reactivity are un-ergonomic and error-prone. Automatic tracking is a core feature of Signals.
 
-**Q**: Why does the `effect` callback run synchronously, rather than scheduled in a microtask?
+**Q**: Why does the `notify` callback run synchronously, rather than scheduled in a microtask?
 
-**A**: Because `effect` cannot read or write Signals, there is no unsoundness brought on by calling it synchronously. A typical `effect` callback will add a Signal to an Array to be read later, or mark a bit somewhere. It is unnecessary and expensive to make a separate microtask for these sorts of actions.
+**A**: Because `notify` cannot read or write Signals, there is no unsoundness brought on by calling it synchronously. A typical `notify` callback will add a Signal to an Array to be read later, or mark a bit somewhere. It is unnecessary and impractically expensive to make a separate microtask for all of these sorts of actions.
 
 **Q**: This API is missing some nice things that my favorite framework provides, which makes it easier to program with Signals. Can that be added to the standard too?
 
