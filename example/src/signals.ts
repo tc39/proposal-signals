@@ -289,7 +289,9 @@ export class State<T> extends Signal<T> {
       if (
         current_effect !== null &&
         current_effect.consumers === null &&
-        current_effect.status === CLEAN
+        current_effect.status === CLEAN &&
+        current_sources !== null &&
+        current_sources.has(this)
       ) {
         current_effect.status = DIRTY;
         notifyEffect(current_effect);
