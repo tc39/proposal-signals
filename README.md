@@ -212,9 +212,9 @@ namespace Signal {
         constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
     }
 
-    class Effect extends Signal<void> {
+    class Effect<T> extends Signal<T> {
         // When a (recursive) source of cb changes, call schedule, to rerun cb
-        constructor(cb: (this: Effect) => void, schedule: EffectOptions);
+        constructor(cb: (this: Effect<T>) => T, options?: EffectOptions);
 
         // Stop scheduling this signal, even if a dependency of cb changes
         [Symbol.dispose]();
@@ -235,6 +235,7 @@ interface SignalOptions<T> {
 
 interface EffectOptions {
     notify: (this: Effect) => void;
+    cleanup: (this: Effect) => void;
 }
 ```
 
@@ -376,7 +377,7 @@ Signal algorithms need to reference certain global state. In JavaScript specific
 
 #### Method: `Signal.prototype.get`
 
-1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computed` is not undefined, throw an exception.
+1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
 1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
     1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
@@ -440,20 +441,22 @@ The constructor sets
 
 - `callback`: The callback to execute the effect
 - `notify`: The callback called when a dependency changes
+- `cleanup`: The callback used at disposal
 
 #### Constructor
 
 1. `callback` is set to a function wrapping its first parameter:
-   1. If this signal's `state` is `~disposed~` return undefined.
-   1. Call the function
-   1. Return undefined.
+   1. If this signal's `state` is `~disposed~`, throw an exception.
+   1. Call the function and return its return value.
 1. `equals` can remain its default `Object.is`--there is no caching for effects, but they also don't notify anyone downstream since sinks is always empty, so it doesn't matter.
 1. `state` is set to `~dirty~`.
 1. `value is set to undefined.
 1. `notify` is set to the callback in the options.
+1. `cleanup` is set to the callback in the options.
 
 #### [Symbol.dispose]
 
+1. Call `cleanup` with `this` as the receiver, if `cleanup` exists.
 1. Set `state` to `~disposed~`.
 1. Remove the effect Signal from the graph by deleting it from all of its sources' sinks list, as well as setting its own sources list to the empty set.
 
