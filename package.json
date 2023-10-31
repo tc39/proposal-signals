@@ -3,7 +3,7 @@
   "name": "proposal-signals",
   "description": "A repository for the ECMAScript Signal proposal.",
   "scripts": {
-    "example": "vite --host",
+    "example:a": "cd examples/example-a && vite --host",
     "start": "npm run build-loose -- --watch",
     "test": "vitest",
     "build": "npm run build-loose -- --strict",
