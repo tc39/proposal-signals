@@ -4,6 +4,7 @@ const DIRTY = 2;
 const DESTROYED = 3;
 
 const UNINITIALIZED = Symbol();
+const MAX_SAFE_INT = Number.MAX_SAFE_INTEGER;
 
 let current_sink: null | Computed<any> | Effect<any> = null;
 let current_effect: null | Effect<any> = null;
@@ -15,6 +16,10 @@ let current_untracking = false;
 // accordingly in the cases where there's no current parent effect
 // when reading the computed via computed.get().
 let current_skip_sink = false;
+// Used to prevent over-subscribing dependencies on a sink
+let current_sink_read_clock = 1;
+let current_read_clock = 1;
+let current_write_clock = 1;
 
 type SignalStatus =
   | typeof DIRTY
@@ -187,11 +192,18 @@ function executeSignalCallback<T>(signal: Computed<T> | Effect<T>): T {
   const previous_sink = current_sink;
   const previous_sources_index = current_sources_index;
   const previous_skip_sink = current_skip_sink;
+  const previous_sink_read_clock = current_sink_read_clock;
   const is_unowned = signal instanceof Computed && signal.unowned;
   current_sources = null as null | Signal<any>[];
   current_sources_index = 0;
   current_sink = signal;
   current_skip_sink = current_effect === null && is_unowned;
+  if (current_read_clock === MAX_SAFE_INT) {
+    current_read_clock = 1;
+  } else {
+    current_read_clock++;
+  }
+  current_sink_read_clock = current_read_clock;
 
   try {
     const value = signal.callback();
@@ -231,6 +243,7 @@ function executeSignalCallback<T>(signal: Computed<T> | Effect<T>): T {
     current_sources_index = previous_sources_index;
     current_sink = previous_sink;
     current_skip_sink = previous_skip_sink;
+    current_sink_read_clock = previous_sink_read_clock;
   }
 }
 
@@ -241,21 +254,21 @@ function updateSignalSources<T>(signal: Signal<T>): void {
   // Register the source on the current sink signal.
   if (current_sink !== null && !current_untracking) {
     const sources = current_sink.sources;
+    const unowned = current_sink instanceof Computed && current_sink.unowned;
     if (
       current_sources === null &&
       sources !== null &&
       sources[current_sources_index] === signal &&
-      !(
-        current_sink instanceof Computed &&
-        current_sink.unowned &&
-        current_effect
-      )
+      !(unowned && current_effect)
     ) {
       current_sources_index++;
     } else if (current_sources === null) {
       current_sources = [signal];
-    } else {
+    } else if (signal.readClock !== current_sink_read_clock) {
       current_sources.push(signal);
+    }
+    if (!unowned) {
+      signal.readClock = current_sink_read_clock;
     }
   }
 }
@@ -272,12 +285,14 @@ class Signal<T> {
   equals: (a: T, b: T) => boolean;
   status: SignalStatus;
   value: T;
+  readClock: number;
 
   constructor(value: T, options?: StateOptions<T>) {
     this.sinks = null;
     this.equals = options?.equals || Object.is;
     this.status = DIRTY;
     this.value = value;
+    this.readClock = 0;
   }
 
   get(): T {
@@ -295,6 +310,11 @@ export class State<T> extends Signal<T> {
     }
     if (!this.equals.call(this, this.value, value)) {
       this.value = value;
+      if (current_write_clock === MAX_SAFE_INT) {
+        current_write_clock = 1;
+      } else {
+        current_write_clock++;
+      }
       if (
         current_effect !== null &&
         current_effect.sinks === null &&
@@ -384,7 +404,3 @@ function untrack<T>(fn: () => T): T {
 export const unsafe = {
   untrack,
 };
-
-export function getActiveEffect<T>(): null | Effect<T> {
-  return current_effect;
-}
