@@ -3,6 +3,7 @@ import * as Signal from "./signals";
 
 let queue: null | Effect<any>[] = null;
 let flush_count = 0;
+let current_effect: null | ExampleFrameworkEffect<any> = null;
 
 function pushChild<T>(
   target: ExampleFrameworkEffect<T>,
@@ -38,10 +39,17 @@ export class ExampleFrameworkEffect<T> extends Signal.Effect<T> {
         if (typeof this.dispose === "function") {
           this.dispose();
         }
-        this.dispose = callback();
+        const previous_effect = current_effect;
+        try {
+          current_effect = this;
+          this.dispose = callback();
+        } finally {
+          current_effect = previous_effect;
+        }
       },
       {
         cleanup: () => {
+          destroyEffectChildren(this);
           if (typeof this.dispose === "function") {
             this.dispose();
           }
@@ -51,16 +59,9 @@ export class ExampleFrameworkEffect<T> extends Signal.Effect<T> {
     );
     this.dispose = undefined;
     this.children = null;
-    const current_effect =
-      Signal.getActiveEffect() as null | ExampleFrameworkEffect<T>;
     if (current_effect !== null) {
       pushChild(current_effect, this);
     }
-  }
-
-  [Symbol.dispose]() {
-    destroyEffectChildren(this);
-    super[Symbol.dispose]();
   }
 }
 
