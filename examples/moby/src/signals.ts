@@ -41,6 +41,28 @@ let currentlyTracking: null | {
 
 let pendingReactions: null | Signal.Effect[] = null;
 
+function scheduleNextTick(effect: Signal.Effect) {
+    if (pendingReactions === null) {
+        pendingReactions = [effect];
+        scheduleInvalidateReactionsInMicrotask();
+    } else {
+        pendingReactions.push(effect);
+    }
+}
+
+function scheduleInvalidateReactionsInMicrotask() {
+    queueMicrotask(() => {
+        const toInvalidate = pendingReactions;
+        pendingReactions = null; // unset first to be able to schedule another microtask if needed
+        // In future: build loop protection
+        invariant(toInvalidate); // should never be empty!
+        toInvalidate.forEach((r) => {
+            r.run();
+        });
+    });
+}
+
+
 export namespace Signal {
     // A read-write Signal
     export class State<T> implements Signal<T> {
@@ -118,16 +140,17 @@ export namespace Signal {
         }
 
         _markStale() {
-            if (this._dirty === DirtyState.Clean) {
+            const startState = this._dirty
+            this._dirty = DirtyState.Dirty;
+            if (startState === DirtyState.Clean) {
                 this.sinks.forEach((s) => s._markMaybeStale());
             }
-            this._dirty = DirtyState.Dirty;
         }
 
         _markMaybeStale() {
             if (this._dirty === DirtyState.Clean) {
-                this.sinks.forEach((s) => s._markMaybeStale());
                 this._dirty = DirtyState.MaybeDirty;
+                this.sinks.forEach((s) => s._markMaybeStale());
             }
             // else: already Dirty or MaybeDirty
         }
@@ -150,9 +173,13 @@ export namespace Signal {
         }
     }
 
+    interface EffectOptions {
+        notify?: (this: Effect, signal: Effect) => void;
+    }
+
     export class Effect implements Subscriber {
         _dirty: DirtyState = DirtyState.Dirty;
-        _version = version;
+        _version = -1;
         _disposed = false;
         _parent?: Effect;
         _children = new Set<Effect>() // optmization: lazy init
@@ -162,27 +189,28 @@ export namespace Signal {
         // schedule should at some time call check
         // this.hasChangedDeps(), and if true, call directly or later
         // this.track(() => { } ...
-        constructor(public onDepsChangedMaybe: (this: Effect) => void) {
+        constructor(public effect: (this: Effect) => EffectReturn, private options?: EffectOptions) {
             const subscriber = currentlyTracking?.subscriber;
             if (subscriber) {
                 invariant(subscriber instanceof Effect, "Only Reactions can create other Reactions");
                 subscriber._children.add(this);
                 this._parent = subscriber;
             }
-            this.onDepsChangedMaybe();
+            this.run();
         }
 
         _markStale() {
-            if (this._dirty === DirtyState.Clean) {
+            let startState = this._dirty;
+            this._dirty = DirtyState.Dirty
+            if (startState === DirtyState.Clean) {
                 this._scheduleInvalidation();
             }
-            this._dirty = DirtyState.Dirty;
         }
 
         _markMaybeStale() {
             if (this._dirty === DirtyState.Clean) {
-                this._scheduleInvalidation();
                 this._dirty = DirtyState.MaybeDirty;
+                this._scheduleInvalidation();
             }
             // else: already Dirty or MaybeDirty
         }
@@ -191,28 +219,32 @@ export namespace Signal {
             if (this._disposed) {
                 return;
             }
-            if (pendingReactions === null) {
-                pendingReactions = [this];
-                scheduleInvalidateReactionsInMicrotask();
+            if (this.options?.notify) {
+                this.options?.notify.call(this, this);
             } else {
-                pendingReactions.push(this);
+                scheduleNextTick(this);
             }
         }
 
-        hasChangedDeps(): boolean {
+        isDirty(): boolean {
             if (this._disposed) {
                 return false;
             }
             return shouldRecompute(this);
         }
 
-        track(fn: (this: this) => EffectReturn): void {
+        run(): void {
             if (this._disposed) return;
-            this._runCleanup();
-            // TODO: error handling and such
-            this._cleanup = track(this, fn, true);
-            // store against which state version we did run
+            // TODO: this should be checked for all parents recursively, not just the first
+            if (this.isDirty() && (this._version === -1 || this._parent === undefined || !this._parent.isDirty())) {
+                this._runCleanup();
+                // TODO: error handling and such
+                this._cleanup = track(this, this.effect, true);
+                // store against which state version we did run
+            }
+
             this._version = version;
+            this._dirty = DirtyState.Clean
         }
 
         _runCleanup() {
@@ -249,18 +281,6 @@ export namespace Signal {
             }
         }
     }
-}
-
-function scheduleInvalidateReactionsInMicrotask() {
-    queueMicrotask(() => {
-        const toInvalidate = pendingReactions;
-        pendingReactions = null; // unset first to be able to schedule another microtask if needed
-        // In future: build loop protection
-        invariant(toInvalidate); // should never be empty!
-        toInvalidate.forEach((r) => {
-            r.onDepsChangedMaybe();
-        });
-    });
 }
 
 function shouldRecompute(subscriber: Subscriber): boolean {
@@ -333,9 +353,5 @@ function isEqual<T>(
 }
 
 export function effect(fn: () => EffectReturn) {
-    return new Signal.Effect(function () {
-        if (this.hasChangedDeps()) {
-            this.track(fn);
-        }
-    });
+    return new Signal.Effect(fn);
 }

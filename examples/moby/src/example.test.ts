@@ -3,6 +3,30 @@ import {Signal, effect} from "./signals";
 
 const nextTick = () => Promise.resolve();
 
+export function syncValueEffect<T>(fn: () => T): {
+  current: T,
+  dispose(): void
+} {
+  let current: T
+  const signal = new Signal.Effect(function () {
+     current = fn();
+  }, {
+      notify() {
+          this.run()
+      }
+  });
+
+  return {
+      get current() {
+          return current;
+      },
+      dispose() {
+          signal[Symbol.dispose]()
+      }
+  }
+}
+
+
 test("state signal can be written and read from", () => {
   const a = new Signal.State(0);
 
@@ -26,20 +50,20 @@ test("computed signal can be read from", () => {
   expect(b.get()).toBe(2);
 });
 
-test.skip("effect signal can be read from", () => {
+test("effect signal can be read from", () => {
   const a = new Signal.State(0);
   const b = new Signal.Computed(() => a.get() * 2);
-  const c = new Signal.Effect(() => b.get());
+  const c = syncValueEffect(() => b.get());
 
   expect(a.get()).toBe(0);
   expect(b.get()).toBe(0);
-  expect(c.get()).toBe(0);
+  expect(c.current).toBe(0);
 
   a.set(1);
 
   expect(a.get()).toBe(1);
   expect(b.get()).toBe(2);
-  expect(c.get()).toBe(2);
+  expect(c.current).toBe(2);
 });
 
 test("effect signal can notify changes", async () => {
@@ -48,21 +72,14 @@ test("effect signal can notify changes", async () => {
   const a = new Signal.State(0);
   const b = new Signal.Computed(() => a.get() * 0);
 
-  // TODO: different from example-a!
   let value;
-  let started = false;
-  const c =  new Signal.Effect(function () {
-    if (!started) {
-      started = true;
-      this.track(() => {
-        value = b.get()
-      })
-    } else {
-      is_dirty = true;
-    }
+  // TODO: different from example-a!
+  const c = new Signal.Effect(() => {value = b.get();}, {
+    notify: () => (is_dirty = true),
   });
 
   expect(value).toBe(0);
+  expect(is_dirty).toBe(false);
 
   a.set(1);
 
@@ -87,39 +104,40 @@ test("effect signal can notify changes", async () => {
   expect(is_dirty).toBe(false);
 });
 
-test.skip("example framework effect signals can be nested", async () => {
+test("example framework effect signals can be nested", () => {
   let log: string[] = [];
+  const l = (m: string) => {
+    log.push(m);
+    // console.log(m);
+  }
 
   const a = new Signal.State(0);
   const b = effect(
     () => {
-      log.push("b update " + a.get());
+      l("b update " + a.get());
       const c = effect(
         () => {
-          log.push("c create " + a.get());
+          l("c create " + a.get());
 
           return () => {
-            log.push("c cleanup " + a.get());
+            l("c cleanup " + a.get());
           };
         },
       );
       // c.get();
 
       return () => {
-        log.push("b cleanup " + a.get());
+        l("b cleanup " + a.get());
       };
     },
   );
 
-  // b.get();
+  b.run()
 
   a.set(1);
-  await nextTick();
-  // b.get();
+  b.run()
 
   a.set(2);
-
-  await nextTick();
 
   b[Symbol.dispose]();
 
@@ -135,46 +153,45 @@ test.skip("example framework effect signals can be nested", async () => {
   ]);
 });
 
-test.skip("effect signal should trigger oncleanup and correctly disconnect from graph", () => {
+test("effect signal should trigger oncleanup and correctly disconnect from graph", () => {
   let cleanups: string[] = [];
 
   const a = new Signal.State(0);
   const b = new Signal.Computed(() => a.get() * 0);
-  const c = new Signal.Effect(() => b.get(), {
+  const c = new Signal.Effect(() => {
+    b.get()
+    return () => {
+      cleanups.push("c");
+    }
+  }, {
     notify: () => {},
   });
 
-  c.cleanup = () => {
-    cleanups.push("c");
-  };
-
   expect(cleanups).toEqual([]);
 
-  c.get();
+  c.run();
 
-  expect(a.sinks?.length).toBe(1);
-  expect(b.sinks?.length).toBe(1);
+  expect(a.sinks?.size).toBe(1);
+  expect(b.sinks?.size).toBe(1);
   expect(cleanups).toEqual([]);
-
-  cleanups = [];
 
   c[Symbol.dispose]();
 
-  expect(a.sinks).toBe(null);
-  expect(b.sinks).toBe(null);
+  expect(a.sinks.size).toBe(0);
+  expect(b.sinks.size).toBe(0);
   expect(cleanups).toEqual(["c"]);
 });
 
-test.skip("effect signal should propogate correctly with computed signals", () => {
+test("effect signal should propogate correctly with computed signals", () => {
   let log: string[] = [];
-  let effects: Signal.Effect<any>[] = [];
+  let effects: Signal.Effect[] = [];
 
-  const queueEffect = (signal) => {
+  const queueEffect = (signal: Signal.Effect) => {
     effects.push(signal);
   };
 
   const flush = () => {
-    effects.forEach((e) => e.get());
+    effects.forEach((e) => e.run());
     effects = [];
   };
 
@@ -194,7 +211,7 @@ test.skip("effect signal should propogate correctly with computed signals", () =
       notify: queueEffect,
     }
   );
-  a.get();
+  a.run();
   const b = new Signal.Effect(
     () => {
       log.push("three");
@@ -204,7 +221,7 @@ test.skip("effect signal should propogate correctly with computed signals", () =
       notify: queueEffect,
     }
   );
-  b.get();
+  b.run();
   const c = new Signal.Effect(
     () => {
       log.push("two");
@@ -214,7 +231,7 @@ test.skip("effect signal should propogate correctly with computed signals", () =
       notify: queueEffect,
     }
   );
-  c.get();
+  c.run();
   const d = new Signal.Effect(
     () => {
       log.push("one");
@@ -224,7 +241,7 @@ test.skip("effect signal should propogate correctly with computed signals", () =
       notify: queueEffect,
     }
   );
-  d.get();
+  d.run();
 
   expect(log).toEqual([
     "four",
@@ -259,7 +276,7 @@ test.skip("effect signal should propogate correctly with computed signals", () =
   d[Symbol.dispose]();
 });
 
-test.skip("effect signal should notify only once", () => {
+test("effect signal should notify only once", () => {
   let log: string[] = [];
 
   const a = new Signal.State(0);
@@ -277,16 +294,12 @@ test.skip("effect signal should notify only once", () => {
     }
   );
 
-  expect(log).toEqual([]);
-
-  c.get();
-
   expect(log).toEqual(["effect ran"]);
 
   a.set(1);
-  c.get();
+  a.set(2);
 
-  expect(log).toEqual(["effect ran", "notified", "effect ran"]);
+  expect(log).toEqual(["effect ran", "notified"]);
 
   c[Symbol.dispose]();
 });
