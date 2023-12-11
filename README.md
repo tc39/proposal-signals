@@ -148,16 +148,13 @@ It turns out that existing Signal libraries are not all that different from each
 
 ### Soundness
 
-* Discourage/prohibit certain kinds of read and write patterns during a computed Signals' evaluation.
-    * Soundness risk: A computed Signal represents a pure computation at a particular point in time over other parts of the Signal graph. If another Signal is both read and later written to, then there is no coherent single point in time during which this computation can be said to be taking place. (TODO: Make this explanation more concrete/practical.)
-    * Solution: During a computed Signal's evaluation, disallow writing to a Signal which has been read within this same evaluation
 * Discourage/prohibit naive misuse of synchronous reactions.
     * Soundness risk: it may expose "glitches" if improperly used: If rendering is done immediately when a Signal is set, it may expose incomplete application state to the end user. Therefore, this feature should only be used to intelligently schedule work for later, once application logic is finished.
     * Solution: Disallow reading and writing any Signal from within a synchronous reaction callback
-        * TODO: Is this too strict to be practical?
 * Discourage `untrack` and mark its unsound nature
     * Soundness risk: allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
     * Solution: The API is marked "unsafe" in the name.
+* Note: This proposal does allow signals to be both read and written from computed and effect signals, without restricting writes that come after reads, despite the soundness risk. This decision was taken to preserve flexibility and compatibility in integration with frameworks. 
 
 ### Surface API
 
@@ -403,7 +400,7 @@ The constructor sets `value` to its parameter, `equals` based on options, and `s
 
 #### Method: `Signal.State.prototype.set`
 
-1. If the current execution context is `notifying` or if this Signal is in the execution context's `computing` is a computed Signal, throw an exception.
+1. If the current execution context is `notifying`, throw an exception.
 1. Run the "set Signal value" algorithm with this Signal and the first parameter for the value.
 1. If that algorithm returned `~clean~`, then return undefined.
 1. Set the `state` of all `sinks` of this Signal to `~dirty~` if they weren't already dirty.
