@@ -60,16 +60,16 @@ To understand Signals, let's take a look at the above example, re-imagined with 
 
 ```js
 const counter = new Signal.State(0);
-const isEven = new Signal.Computed(() => (counter.get() & 1) == 0);
-const parity = new Signal.Computed(() => isEven.get() ? "even" : "odd");
+const isEven = new Signal.Computed(() => (counter() & 1) == 0);
+const parity = new Signal.Computed(() => isEven() ? "even" : "odd");
 
 // A library or framework defines effects based on other Signal primitives
 declare function effect(cb: () => void): (() => void);
 
-effect(() => element.innerText = parity.get());
+effect(() => element.innerText = parity());
 
 // Simulate external updates to counter...
-setInterval(() => counter.set(counter.get() + 1), 1000);
+setInterval(() => counter.set(counter() + 1), 1000);
 ```
 
 There are a few things we can see right away:
@@ -265,7 +265,7 @@ Like Promises, Signals can represent an error state: If a computed Signal's call
 A `Signal` instance represents the capability to read a dynamically changing value whose updates are tracked over time. It also implicitly includes the capability to subscribe to the Signal, implicitly through a tracked access from another computed Signal.
 
 The API here is designed to match the very rough ecosystem consensus among a large fraction of Signal libraries:
-- Access is through calls to `get`, e.g., `mySignal.get()` (both for computed and state). [Note: this disagrees with all popular signal APIs, which either use a `.value`-style accessor, or `signal()` call syntax.]
+- Access is through calls to the signal, e.g., `mySignal()` (both for computed and state). [Note: this matches a good fraction of signal libraries; others use `.value`, which can be added on in JS.]
 - Names "state", "computed", "effect" and "Signal" itself are chosen to match names used elsewhere.
 
 The API is designed to reduce the number of allocations, to make Signals suitable for embedding in JavaScript frameworks while reaching same or better performance than existing framework-customized Signals. This implies:
@@ -292,7 +292,7 @@ The `Effect` interface defined above gives the basis for implementing typical JS
 // An effect effect Signal which evaluates to cb, which schedules a read of
 // itself on the microtask queue whenever one of its dependencies might change
 class SimpleEffect extends Signal.Effect {
-    static #options = { notify() { queueMicrotask(() => this.get()); };
+    static #options = { notify() { queueMicrotask(() => this()); };
     constructor(cb) {
         super(cb, SimpleEffect.#options);
         // Run for the first time to subscribe to sources
@@ -313,7 +313,7 @@ Calls to `notify` are ultimately triggered by a call to `.set()` on some state S
 
 Note that it is perfectly possible to use Signals effectively without `Symbol.Effect` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
 
-Both computed and state Signals are garbage-collected like any JS values. But effect Signals have a special way of holding things alive: If an effect Signal has had `.get()` called on it, then any computed Signals that the effect references will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `[Symbol.dispose]` to clean up effects.
+Both computed and state Signals are garbage-collected like any JS values. But effect Signals have a special way of holding things alive: If an effect Signal has been accessed (called), then any computed Signals that the effect references will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future call). For this reason, remember to call `[Symbol.dispose]` to clean up effects.
 
 > TODO: Investigate whether automatic GC of computed Signals which are not referenced by effects is implementable without too much overhead
 
@@ -360,7 +360,7 @@ Some aspects of the algorithm:
 
 Signal algorithms need to reference certain global state. In JavaScript specification terms, we refer to these as fields of the execution context.
 
-- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` call, or `undefined`. Initially `undefined`.
+- `computing`: The innermost computed or effect Signal currently being reevaluated due to an access (call), or `undefined`. Initially `undefined`.
 - `notifying`: Boolean denoting whether there is an `notify` callback currently executing. Initially `false`.
 
 ### The `Signal` class
@@ -375,7 +375,7 @@ Signal algorithms need to reference certain global state. In JavaScript specific
 - `sinks`: An ordered set of Signals which depend on this Signal. For effect signals, this will be the empty set.
 - `equals`: The equals method provided in the options, defaulting to `Object.is`.
 
-#### Method: `Signal.prototype.get`
+#### `[[Call]]` on Signal objects
 
 1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
 1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
