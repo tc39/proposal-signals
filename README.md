@@ -188,14 +188,14 @@ An initial idea of a Signal API is below. Note that this is just an early draft,
 
 ```ts
 // A cell of data which may change over time
-class Signal<T> {
+interface Signal<T> {
     // Get the value of the Signal
     get(): T;
 }
 
 namespace Signal {
     // A read-write Signal
-    class State<T> extends Signal<T> {
+    class State<T> implements Signal<T> {
         // Create a state Signal starting with the value t
         constructor(t: T, options?: SignalOptions<T>);
 
@@ -204,14 +204,22 @@ namespace Signal {
     }
     
     // A Signal which is a formula based on other Signals
-    class Computed<T> extends Signal<T> {
+    class Computed<T> implements Signal<T> {
         // Create a Signal which evaluates to the value of cb.call(the Signal)
         constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
     }
 
-    class Effect<T> extends Signal<T> {
-        // When a (recursive) source of cb changes, call schedule, to rerun cb
+    // A reaction to computed or state signals changing
+    class Effect {
+        // When a (recursive) source of cb changes, call schedule
         constructor(cb: (this: Effect<T>) => T, options?: EffectOptions);
+
+        // Re-run cb and set dependencies based on what is accessed
+        void run();
+
+        // True iff any source of the effect is dirty, or is a computed signal
+        // with a source which is dirty or pending and hasn't yet been re-evaluated
+        boolean isPending();
 
         // Stop scheduling this signal, even if a dependency of cb changes
         [Symbol.dispose]();
@@ -289,7 +297,7 @@ The `Effect` interface defined above gives the basis for implementing typical JS
 // An effect effect Signal which evaluates to cb, which schedules a read of
 // itself on the microtask queue whenever one of its dependencies might change
 class SimpleEffect extends Signal.Effect {
-    static #options = { notify() { queueMicrotask(() => this.get()); };
+    static #options = { notify() { queueMicrotask(() => this.run()); };
     constructor(cb) {
         super(cb, SimpleEffect.#options);
         // Run for the first time to subscribe to sources
@@ -357,29 +365,14 @@ Some aspects of the algorithm:
 
 Signal algorithms need to reference certain global state. In JavaScript specification terms, we refer to these as fields of the execution context.
 
-- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` call, or `undefined`. Initially `undefined`.
+- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` or `.run` call, or `undefined`. Initially `undefined`.
 - `notifying`: Boolean denoting whether there is an `notify` callback currently executing. Initially `false`.
 
-### The `Signal` class
+### The `Signal` namespace
 
-`Signal` is an abstract class whose constructor throws. All Signals are either state Signals or computed Signals. They have a common structure and `get` algorithm, described below.
+`Signal` is ordinary object which serves as a namespace for Signal-related classes and functions.
 
-#### Hidden fields
-
-- `value`: The previous cached value of the Signal, or `~uninitialized~` for a never-read computed Signal. The value may be an exception which gets rethrown when the value is read. Always `undefined` for effect signals.
-- `state`: May be `~clean~`, `~checked~`, `~computing~`, `~disposed~` or `~dirty~`. State Signals are always `~clean~`. Only effects go into the `~disposed~` state.
-- `sources`: An ordered set of Signals which this Signal depends on. For state Signals, this will be the empty set.
-- `sinks`: An ordered set of Signals which depend on this Signal. For effect signals, this will be the empty set.
-- `equals`: The equals method provided in the options, defaulting to `Object.is`.
-
-#### Method: `Signal.prototype.get`
-
-1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
-1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
-1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
-    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
-    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
-1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
+#### Common algorithms
 
 ##### Algorithm: recalculate dirty computed Signal
 
@@ -394,14 +387,35 @@ Signal algorithms need to reference certain global state. In JavaScript specific
 1. If that algorithm returned `~dirty~`: mark all sinks of this Signal as `~dirty~` (previously, the sinks may have been a mix of checked and dirty).
 1. Otherwise, that algorithm returned `~clean~`: In this case, for each `~checked~` sink of this Signal, if all of that Signal's sources are now clean, then mark that Signal as `~clean~` as well. Apply this cleanup step to further sinks recursively, to any newly clean Signals which have checked sinks.
 
+##### Set Signal value algorithm
+
+1. If this Signal is an Effect, skip this algorithm.
+1. If this algorithm was passed a value (as opposed to an exception for rethrowing, from the recalculate dirty computed Signal algorithm):
+    1. Call this Signal's `equals` function, given this Signal as the `this` value, and passing as parameters the current `value` and the new value. If an exception is thrown, save that exception (for rethrowing when read) as the value of the Signal and continue as if the callback had returned false.
+    1. If that returned true, return `~clean~`.
+1. Set the `value` of this Signal to the parameter.
+1. Return `~dirty~`
+
 ### The `Signal.State` class
 
 The constructor sets `value` to its parameter, `equals` based on options, and `state` to `~clean~`.
 
+#### Internal slots
+
+- `value`: The current value of the state signal
+- `equals`: The comparison function used when changing values
+- `sinks`: Set of signals which depend on this one
+
+#### Method: `Signal.State.prototype.get`
+
+1. If the current execution context is `notifying`, throw an exception.
+1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
+1. Return this Signal's `value`.
+
 #### Method: `Signal.State.prototype.set`
 
 1. If the current execution context is `notifying`, throw an exception.
-1. Run the "set Signal value" algorithm with this Signal and the first parameter for the value.
+1. Run the "set Signal value" algorithm with this Signa l and the first parameter for the value.
 1. If that algorithm returned `~clean~`, then return undefined.
 1. Set the `state` of all `sinks` of this Signal to `~dirty~` if they weren't already dirty.
 1. Set the `state` of all of the sinks' dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place).
@@ -410,46 +424,58 @@ The constructor sets `value` to its parameter, `equals` based on options, and `s
 1. If any exception was thrown from the `notify` callbacks, propagate it to the caller after all `notify` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
 1. Return undefined.
 
-##### Set Signal value algorithm
-
-1. If this algorithm was passed a value (as opposed to an exception for rethrowing, from the recalculate dirty computed Signal algorithm):
-    1. Call this Signal's `equals` function, given this Signal as the `this` value, and passing as parameters the current `value` and the new value. If an exception is thrown, save that exception (for rethrowing when read) as the value of the Signal and continue as if the callback had returned false.
-    1. If that returned true, return `~clean~`.
-1. Set the `value` of this Signal to the parameter.
-1. Return `~dirty~`
-
 ### The `Signal.Computed` class
 
-#### Additional hidden fields
+#### Internal slots
 
+- `value`: The previous cached value of the Signal, or `~uninitialized~` for a never-read computed Signal. The value may be an exception which gets rethrown when the value is read. Always `undefined` for effect signals.
+- `state`: May be `~clean~`, `~checked~`, `~computing~`, or `~dirty~`.
+- `sources`: An ordered set of Signals which this Signal depends on.
+- `sinks`: An ordered set of Signals which depend on this Signal.
+- `equals`: The equals method provided in the options.
 - `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
 
 #### Constructor
 
 The constructor sets
 - `callback` to its first parameter
-- `equals` based on options
+- `equals` based on options, defaulting to `Object.is` if absent
 - `state` to `~dirty~`
 - `value` to `~uninitialized~`
 
+#### Method: `Signal.Computed.prototype.get`
+
+1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
+1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
+1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
+    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
+    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
+1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
+
 ### The `Signal.Effect` class
 
-#### Additional hidden fields
+#### Internal slots
 
-- `callback`: The callback to execute the effect
-- `notify`: The callback called when a dependency changes
-- `cleanup`: The callback used at disposal
+- `state`: May be `~clean~`, `~checked~`, `~running~`, `~disposed~` or `~dirty~`.
+- `sources`: An ordered set of Signals which this Signal depends on.
+- `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
 
 #### Constructor
 
 1. `callback` is set to a function wrapping its first parameter:
    1. If this signal's `state` is `~disposed~`, throw an exception.
    1. Call the function and return its return value.
-1. `equals` can remain its default `Object.is`--there is no caching for effects, but they also don't notify anyone downstream since sinks is always empty, so it doesn't matter.
 1. `state` is set to `~dirty~`.
-1. `value is set to undefined.
 1. `notify` is set to the callback in the options.
 1. `cleanup` is set to the callback in the options.
+
+#### Method: `Signal.Effect.prototype.run`
+
+1. If the current execution context is `notifying` or if this Signal has the state `~running~`, or if `computing` a computed Signal, throw an exception.
+1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
+    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, including this Signal at the end, *even if it is not marked `~dirty~`*).
+    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
+1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
 
 #### [Symbol.dispose]
 
