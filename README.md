@@ -349,7 +349,7 @@ Currently, there is a small [example implementation of Signals](https://github.c
 
 The collaborators on the Signal proposal want to be especially conservative in how we push this proposal forward, so that we don't land in the trap of getting something shipped which we end up regretting and not actually using. Our plan is to do the following extra tasks, not required by the TC39 process, to make sure that this proposal is on track:
 - Before proposing for Stage 1: A concrete API is sketched out, and implemented in JS, with experiments showing that it can integrate reasonably well into some JS frameworks. Some medium-sized worked examples using the API directly are prepared.
-- Before proposing for Stage 2: The proposed Signal API has been integrated into a large number of JS frameworks that we consider somewhat representative, and some large applications work with this basis. The collaborators have a solid grasp on the space of possible extensions to the API, and have concluded which (if any) should be added into this proposal. A polyfill implementation exists which is solid, well-tested (in a shared test format), and competitive in terms of performance.
+- Before proposing for Stage 2: The proposed Signal API has been integrated into a large number of JS frameworks that we consider somewhat representative, and some large applications work with this basis. The collaborators have a solid grasp on the space of possible extensions to the API, and have concluded which (if any) should be added into this proposal. A polyfill implementation exists which is solid, well-tested (in a shared test format), and competitive in terms of performance (as verified with a thorough signal/framework benchmark set).
 - Before proposing for Stage 3: There is an optimized native JS engine implementation of the Signal API, allowing investigation of performance and memory management properties.
 
 ## Signal algorithms
@@ -471,7 +471,9 @@ The constructor sets
 
 #### Method: `Signal.Effect.prototype.run`
 
-1. If the current execution context is `notifying` or if this Signal has the state `~running~`, or if `computing` a computed Signal, throw an exception.
+1. If the current execution context is `notifying`, throw an exception.
+1. If this Signal has the state `~running~`, throw an exception.
+1. If `computing` a computed Signal, throw an exception.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
     1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, including this Signal at the end, *even if it is not marked `~dirty~`*).
     1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
