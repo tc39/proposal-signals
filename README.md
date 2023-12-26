@@ -1,4 +1,4 @@
-# Standard JavaScript Signals proposal
+# 🚦Standard JavaScript Signals proposal🚦
 
 This document outlines the goals of a standard JavaScript Signal proposal and a minimal API, with the intention of bringing Signals as a TC39 proposal in the future. The effort here is driven by authors and maintainers of related frameworks and libraries in JavaScript, with a focus on developing significant experience using shared JavaScript libraries to refine the proposal prior to standardization.
 
@@ -138,12 +138,14 @@ It turns out that existing Signal libraries are not all that different from each
 * Reactions to the condition where a computed Signal has one of its dependencies (or nested dependencies) become "dirty" and change, meaning that the Signal's value might be outdated.
     * This reaction is meant to schedule more significant work to be performed later.
     * Effects are implemented in terms of these reactions, plus framework-level scheduling.
+    * Computed signals need the ability to react to whether they are registered as a (nested) dependency of one of these reactions.
 * Enable JS frameworks to do their own scheduling. No Promise-style built-in forced-on scheduling.
     * Synchronous reactions are needed to enable scheduling later work based on framework logic.
     * Writes are synchronous and immediately take effect (a framework which batches writes can do that on top).
+    * It is possible to separate checking whether a effect may be "dirty" from actually running the effect (enabling a two-stage effect scheduler). 
 * Ability to read Signals *without* triggering dependencies to be recorded (`untrack`)
 * Enable composition of different codebases which use Signals/reactivity, e.g.,
-    * Using multiple frameworks together as far as tracking/reactivity itself goes (though there are lots of other problems to solve)
+    * Using multiple frameworks together as far as tracking/reactivity itself goes (modulo omissions, see below)
     * Framework-independent reactive data structures (e.g., recursively reactive store proxy, reactive Map and Set and Array, etc.)
 
 ### Soundness
@@ -161,7 +163,6 @@ It turns out that existing Signal libraries are not all that different from each
 * Must be a solid base for multiple frameworks to implement their Signals/reactivity mechanisms.
     * Should be a good base for recursive store proxies, decorator-based class field reactivity, and both `.value` and `[state, setState]`-style APIs.
     * The semantics are able to express the valid patterns enabled by different frameworks. For example, it should be possible for these Signals to be the basis of either immediately-reflected writes or writes which are batched and applied later.
-    * Enable subclassing, so that frameworks can add their own methods and fields, including private fields. This is important to avoid the need for additional allocations at the framework level.
 * It would be nice if this API is usable directly by JavaScript developers.
     * If a feature matches with an ecosystem concept, using common vocabulary is good.
         * However, important to not literally shadow the exact same names!
@@ -169,6 +170,9 @@ It turns out that existing Signal libraries are not all that different from each
         * Idea: Provide all the hooks, but include errors when misused if possible.
         * Idea: Indicate in some names when things are unsafe (in particular `untrack`).
         * TODO: Should more names be made more obscure to indicate badness? Are the names around `Signal.Effect` appropriate?
+* Be implementable and usable with good performance -- the surface API doesn't cause too much overhead
+    * Enable subclassing, so that frameworks can add their own methods and fields, including private fields. This is important to avoid the need for additional allocations at the framework level. See "Memory management" below.
+
 
 ### Memory management
 
@@ -181,6 +185,16 @@ It turns out that existing Signal libraries are not all that different from each
     * to implement effects (avoid a closure for every single reaction)
     * In the API for observing Signal changes, avoid creating additional temporary data structures
     * Solution: Class-based API enabling reuse of methods and fields defined in subclasses
+
+### Omitted for now
+
+These features may be added later, but they are not included in the current draft. Their omission is due to the lack of established consensus in the design space among frameworks, as well as the demonstrated ability to work around their absense with mechanisms on top of the Signals notion described in this document. However, unfortunately, the omission limits the potential of interoperability among frameworks. As prototypes of Signals as described in this document are produced, there will be an effort to reexamine whether these omissions were the appropriate decision.
+
+* Async: Signals are always synchronously available for evaluation, in this model. However, it is frequently useful to have certain asynchronous processes which lead to a signal being set, and to have an understanding of when a signal is still "loading". It can also be useful to have a computed signal based on an async function, and to start evaluation of the async dependencies eagerly (increasing parallelism) when the computed signal is read. [TODO: Link to the appropriate thing from Milo.]
+* Forking: For transitions between views, it is often useful to maintain a live state for both the "from" and "to" states. The "to" state renders in the background, until it is ready to swap over, while the "from" state remains interactive. Maintaining both states at the same time requires "forking" the state of the signal graph. Such a capability is easily provided in React due to non-mutated state, but somehow lives within the data structures in a Signal-driven system.
+* Relays: This name refers to the idea of having a graph-native representation of state signals driven by certain processes. For example, when converting an observable to a signal, one subscribes to the observable and writes to the state from it; the observable is only subscribed to if this state signal is used in an effect. This may be implemented via the primitives described here, but it would be more organized and facilitate improved scheduling if the dependencies involved were represented in the signal graph directly, via a compound mechanism for this purpose. [TODO: Link to the appropriate thing from pzuraq.]
+
+Some possible [convenience methods](https://github.com/proposal-signals/proposal-signals/issues/32) are also omitted. 
 
 ## API sketch
 
@@ -320,8 +334,6 @@ Note that it is perfectly possible to use Signals effectively without `Symbol.Ef
 
 Both computed and state Signals are garbage-collected like any JS values. But effect Signals have a special way of holding things alive: If an effect Signal has had `.get()` called on it, then any computed Signals that the effect references will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `[Symbol.dispose]` to clean up effects.
 
-> TODO: Investigate whether automatic GC of computed Signals which are not referenced by effects is implementable without too much overhead
-
 ### An unsound escape hatch
 
 `Signal.unsafe.untrack` is an escape hatch allowing reading Signals *without* tracking those reads. This capability is unsafe because it allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
@@ -329,6 +341,8 @@ Both computed and state Signals are garbage-collected like any JS values. But ef
 The ability to perform untracked reads is necessary for efficiency because (*TODO*).
 
 ## Possible features under discussion
+
+[TODO: This section is subsumed by the part above, once we add introspection.]
 
 The above API provides a sort of Minimum Viable Product for Signals which enables many important use cases. However, it actually wouldn't be viable to integrate into certain frameworks: it's missing some capabilities or performance properties which *some* frameworks take advantage of. It is still to be determined whether any extensions will be included as part of the initial Signal proposal; the Signal collaborators have not come to agreement about any of these yet.
 
