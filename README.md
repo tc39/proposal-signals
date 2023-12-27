@@ -2,6 +2,8 @@
 
 This document outlines the goals of a standard JavaScript Signal proposal and a minimal API, with the intention of bringing Signals as a TC39 proposal in the future. The effort here is driven by authors and maintainers of related frameworks and libraries in JavaScript, with a focus on developing significant experience using shared JavaScript libraries to refine the proposal prior to standardization.
 
+The plan for this proposal is to do significant early prototyping, including integration into several frameworks, before advancing beyond Stage 1. We are only interested in standardizing Signals if they are suitable for use in practice in multiple frameworks, and provide real benefits over framework-provided signals. We hope that significant early prototyping will give us this information. See "Status and development plan" below for more details.
+
 ## Background: Why Signals?
 
 To develop a complicated user interface (UI), JavaScript application developers need to store, compute, invalidate, sync, and push state to the application's view layer in an efficient way. UIs commonly involve more than just managing simple values, but often involve rendering computed state which is dependent on a complex tree of other values or state that is also computed itself. The goal of Signals is to provide infrastructure for managing such application state so developers can focus on business logic rather than these repetitive details.
@@ -89,6 +91,8 @@ Signals give us much more than what can be seen on the surface of the API though
 
 Given extensive experience with Signals as a broadly useful construct, we propose to add a built-in Signal construct to JavaScript.
 
+#### Batteries included
+
 In general, JavaScript has had a fairly minimal standard library, but a trend in TC39 has been to make JS more of a "batteries-included" language, with a high-quality, built-in set of functionality available. For example, Temporal is replacing moment.js, and a number of small features, e.g., `Array.prototype.flat` and `Object.group` are replacing many lodash use cases. Benefits include smaller bundle sizes, improved stability and quality, less to learn when joining a new project, and a generally common vocabulary across JS developers.
 
 Apart from making Signals available out-of-the-box with the generic benefits that brings, we see the following technical benefits:
@@ -105,8 +109,6 @@ It is always a small potential performance boost to ship less code due to common
 
 We suspect that native C++ implementations of Signal-related data structures and algorithms can be slightly more efficient than what is achievable in JS, by a constant factor. However, no algorithmic changes are anticipated vs. what would be present in a polyfill; engines are not expected to be magic here, and the reactivity algorithms themselves will be well-defined and unambiguous.
 
-Many Signal implementations require computed Signals which are not in use anymore to be manually disposed, as the rest of the Signal graph ends up holding them alive. Using WeakRef/FinalizationRegistry to enable automatic garbage collection of computed Signals has a performance cost. In the context of the implementation of built-in Signals, we plan to investigate whether this cost can be reduced.
-
 The champion group expects to develop various implementations of Signals, and use these to investigate these performance possibilities.
 
 #### DevTools
@@ -122,6 +124,10 @@ Built-in Signals enable JS runtimes and DevTools to potentially have improved su
 Current work in W3C and by browser implementors is seeking to bring native templating to HTML. Additionally, the W3C Web Components CG is exploring the possibility of extending Web Components to offer a fully declarative HTML API. To accomplish both of these goals, eventually a reactive primitive will be needed by HTML. Additionally, many ergonomic improvements to the DOM through integration of Signals can be imagined and have been asked for by the community.
 
 > Note, this integration would be a separate effort to come later, not part of this proposal itself.
+
+#### Ecosystem information exchange (*not* a reason to ship)
+
+Standardization efforts can sometimes be helpful just at the "community" level, even without changes in browsers. The Signals effort is bringing together many different framework authors for a deep discussion about the nature of reactivity, algorithms and interoperability. This has already been useful, and does not justify inclusion in JS engines and browsers; Signals should only be added to the JavaScript standard if there are significant benefits *beyond* the ecosystem information exchange enabled.
 
 ## Design goals for Signals
 
@@ -173,7 +179,6 @@ It turns out that existing Signal libraries are not all that different from each
 * Be implementable and usable with good performance -- the surface API doesn't cause too much overhead
     * Enable subclassing, so that frameworks can add their own methods and fields, including private fields. This is important to avoid the need for additional allocations at the framework level. See "Memory management" below.
 
-
 ### Memory management
 
 * If possible: A computed Signal should be garbage-collectable if nothing live is referencing it for possible future reads, even if it's linked into a broader graph which stays alive (e.g., by reading a state which remains live).
@@ -185,16 +190,6 @@ It turns out that existing Signal libraries are not all that different from each
     * to implement effects (avoid a closure for every single reaction)
     * In the API for observing Signal changes, avoid creating additional temporary data structures
     * Solution: Class-based API enabling reuse of methods and fields defined in subclasses
-
-### Omitted for now
-
-These features may be added later, but they are not included in the current draft. Their omission is due to the lack of established consensus in the design space among frameworks, as well as the demonstrated ability to work around their absense with mechanisms on top of the Signals notion described in this document. However, unfortunately, the omission limits the potential of interoperability among frameworks. As prototypes of Signals as described in this document are produced, there will be an effort to reexamine whether these omissions were the appropriate decision.
-
-* Async: Signals are always synchronously available for evaluation, in this model. However, it is frequently useful to have certain asynchronous processes which lead to a signal being set, and to have an understanding of when a signal is still "loading". It can also be useful to have a computed signal based on an async function, and to start evaluation of the async dependencies eagerly (increasing parallelism) when the computed signal is read. [TODO: Link to the appropriate thing from Milo.]
-* Forking: For transitions between views, it is often useful to maintain a live state for both the "from" and "to" states. The "to" state renders in the background, until it is ready to swap over, while the "from" state remains interactive. Maintaining both states at the same time requires "forking" the state of the signal graph. Such a capability is easily provided in React due to non-mutated state, but somehow lives within the data structures in a Signal-driven system.
-* Relays: This name refers to the idea of having a graph-native representation of state signals driven by certain processes. For example, when converting an observable to a signal, one subscribes to the observable and writes to the state from it; the observable is only subscribed to if this state signal is used in an effect. This may be implemented via the primitives described here, but it would be more organized and facilitate improved scheduling if the dependencies involved were represented in the signal graph directly, via a compound mechanism for this purpose. [TODO: Link to the appropriate thing from pzuraq.]
-
-Some possible [convenience methods](https://github.com/proposal-signals/proposal-signals/issues/32) are also omitted. 
 
 ## API sketch
 
@@ -218,7 +213,8 @@ interface SignalSource<T> {
 // Something which may read a signal
 // (Computed or Effect signal)
 interface SignalSink {
-    // Returns ordered list of all signals which 
+    // Returns ordered list of all signals which this one referenced
+    // during the last time it was evaluated
     introspectSources(): Signal[];
 }
 
@@ -362,22 +358,29 @@ Both computed and state Signals are garbage-collected like any JS values. But ef
 
 `Signal.unsafe.untrack` is an escape hatch allowing reading Signals *without* tracking those reads. This capability is unsafe because it allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
 
-The ability to perform untracked reads is necessary for efficiency because (*TODO*).
+TOOD: Show example where it's a good idea to use untrack
 
-## Possible features under discussion
+### Using connected/disconnected
 
-[TODO: This section is subsumed by the part above, once we add introspection.]
+TODO: Show example of converting an Observable to a computed signal, subscribed only when used by an effect
 
-The above API provides a sort of Minimum Viable Product for Signals which enables many important use cases. However, it actually wouldn't be viable to integrate into certain frameworks: it's missing some capabilities or performance properties which *some* frameworks take advantage of. It is still to be determined whether any extensions will be included as part of the initial Signal proposal; the Signal collaborators have not come to agreement about any of these yet.
+TODO: Show example of a computed signal which represents the result of a fetch directed at a state, which is cancelled 
 
-- For ergonomics: Various convenience methods (e.g., `Signal.State.prototype.update` as in Angular); brand checks
-- For SSR: introspection of Signal dependencies
-- For incremental hydration/resumability: a Signal which can be created with a fixed value and later transformed into a computed Signal
-- For handling asynchronicity: A "loading" state of Signals which propagates automatically through the dependency graph, allowing a React Suspense-like system to be created
-- For state management: A single object which represents state and processes for updating it, including lifecycle events which simplify ownership management
-- For interoperable ownership: When one effect is nested inside of another, automatically dispose the inner effect when the outer one is reevaluated or disposed (and provide extra hooks to use this mechanism flexibly).
+### Introspection for SSR
 
-TODO: Link to more detailed resources investigating each of these
+TODO: Show how serializing the signal graph works
+
+TODO: Show how you can "hydrate" a signal from state to computed later, using a few signals.
+
+### Omitted for now
+
+These features may be added later, but they are not included in the current draft. Their omission is due to the lack of established consensus in the design space among frameworks, as well as the demonstrated ability to work around their absense with mechanisms on top of the Signals notion described in this document. However, unfortunately, the omission limits the potential of interoperability among frameworks. As prototypes of Signals as described in this document are produced, there will be an effort to reexamine whether these omissions were the appropriate decision.
+
+* Async: Signals are always synchronously available for evaluation, in this model. However, it is frequently useful to have certain asynchronous processes which lead to a signal being set, and to have an understanding of when a signal is still "loading". It can also be useful to have a computed signal based on an async function, and to start evaluation of the async dependencies eagerly (increasing parallelism) when the computed signal is read. [TODO: Link to the appropriate thing from Milo.]
+* Forking: For transitions between views, it is often useful to maintain a live state for both the "from" and "to" states. The "to" state renders in the background, until it is ready to swap over, while the "from" state remains interactive. Maintaining both states at the same time requires "forking" the state of the signal graph. Such a capability is easily provided in React due to non-mutated state, but somehow lives within the data structures in a Signal-driven system.
+* Relays: This name refers to the idea of having a graph-native representation of state signals driven by certain processes. For example, when converting an observable to a signal, one subscribes to the observable and writes to the state from it; the observable is only subscribed to if this state signal is used in an effect. This may be implemented via the primitives described here, but it would be more organized and facilitate improved scheduling if the dependencies involved were represented in the signal graph directly, via a compound mechanism for this purpose. [TODO: Link to the appropriate thing from pzuraq.]
+
+Some possible [convenience methods](https://github.com/proposal-signals/proposal-signals/issues/32) are also omitted. 
  
 ## Status and development plan
 
@@ -410,7 +413,126 @@ Signal algorithms need to reference certain global state. In JavaScript specific
 
 `Signal` is ordinary object which serves as a namespace for Signal-related classes and functions.
 
-#### Common algorithms
+### The `Signal.State` class
+
+#### `Signal.State` internal slots
+
+- `value`: The current value of the state signal
+- `equals`: The comparison function used when changing values
+- `
+- `sinks`: Set of connected signals which depend on this one
+
+#### Constructor: `Signal(initialValue, options)`
+
+1. Set this Signal's `value` to `initialValue`.
+1. ...
+1. Set `state` to `~clean~`.
+The constructor sets `value` to its parameter, `equals` based on options, and `state` to `~clean~`.
+
+#### Method: `Signal.State.prototype.get()`
+
+1. If `notifying` is true, throw an exception.
+1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
+1. Return this Signal's `value`.
+
+#### Method: `Signal.State.prototype.set(newValue)`
+
+1. If the current execution context is `notifying`, throw an exception.
+1. Run the "set Signal value" algorithm with this Signal and the first parameter for the value.
+1. If that algorithm returned `~clean~`, then return undefined.
+1. Set the `state` of all `sinks` of this Signal to `~dirty~` if they weren't already dirty.
+1. Set the `state` of all of the sinks' dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place).
+1. For each `~clean~` effect Signal encountered in that recursive search, if the Signal is not in the `~disposed~` state, then in depth-first order,
+    1. Set `notifying` to true while calling their `notify` method (saving aside any exception thrown, but ignoring the return value of `notify`), and then restore `notifying` to false.
+1. If any exception was thrown from the `notify` callbacks, propagate it to the caller after all `notify` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
+1. Return undefined.
+
+#### Method: `Signal.State.prototype.introspectSinks()`
+
+1. Return a new Array copying the contents of `sinks`.
+
+#### Method: `Signal.State.prototype.isConnected()`
+
+1. Return true if `sinks` is non-empty.
+1. Otherwise, return false.
+
+### The `Signal.Computed` class
+
+#### `Signal.Computed` Internal slots
+
+- `value`: The previous cached value of the Signal, or `~uninitialized~` for a never-read computed Signal. The value may be an exception which gets rethrown when the value is read. Always `undefined` for effect signals.
+- `state`: May be `~clean~`, `~checked~`, `~computing~`, or `~dirty~`.
+- `sources`: An ordered set of Signals which this Signal depends on.
+- `sinks`: An ordered set of Signals which depend on this Signal.
+- `equals`: The equals method provided in the options.
+- `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
+
+#### `Signal.Computed` Constructor
+
+The constructor sets
+- `callback` to its first parameter
+- `equals` based on options, defaulting to `Object.is` if absent
+- `state` to `~dirty~`
+- `value` to `~uninitialized~`
+
+#### Method: `Signal.Computed.prototype.get`
+
+1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
+1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
+1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
+    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
+    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
+1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
+
+### The `Signal.Effect` class
+
+#### `Signal.Effect` internal slots
+
+- `state`: May be `~clean~`, `~checked~`, `~running~`, `~disposed~` or `~dirty~`.
+- `sources`: An ordered set of Signals which this Signal depends on.
+- `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
+
+#### Constructor: `Signal.Effect(callback, options)`
+
+1. `callback` is set to the callback parameter.
+1. `state` is set to `~dirty~`.
+1. `notify` is set to `options.notify`.
+1. `cleanup` is set to `options.cleanup`.
+
+#### Method: `Signal.Effect.prototype.run()`
+
+1. If the current execution context is `notifying`, throw an exception.
+1. If this Signal has the state `~running~` or `~disposed~`, throw an exception.
+1. If `computing` is a computed Signal, throw an exception.
+1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
+    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, including this Signal at the end, *even if it is not marked `~dirty~`*).
+    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
+1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
+
+#### Method: `Signal.Effect.prototype[Symbol.dispose]()`
+
+1. Call `cleanup` with `this` as the receiver, if `cleanup` exists.
+1. Set `state` to `~disposed~`.
+1. Remove the effect Signal from the graph by deleting it from all of its sources' sinks list, as well as setting its own sources list to the empty set.
+
+#### Method: `Signal.Effect.prototype.isPending()`
+
+1. Return true if `state` is `~dirty~` or `~checked~`
+1. Otherwise, return false.
+
+#### Method: `Signal.Effect.prototype.introspectSources()`
+
+### Method: `Signal.unsafe.untrack(cb)`
+
+1. Let `c` be the execution context's current `computing` state.
+1. Set `computing` to undefined.
+1. Call `cb`.
+1. Restore `computing` to `c` (even if `cb` threw an exception).
+1. Return the return value of `cb` (rethrowing any exception).
+
+Note: untrack doesn't get you out of the `notifying` state, which is maintained strictly.
+
+### Common algorithms
 
 ##### Algorithm: recalculate dirty computed Signal
 
@@ -433,105 +555,6 @@ Signal algorithms need to reference certain global state. In JavaScript specific
     1. If that returned true, return `~clean~`.
 1. Set the `value` of this Signal to the parameter.
 1. Return `~dirty~`
-
-### The `Signal.State` class
-
-The constructor sets `value` to its parameter, `equals` based on options, and `state` to `~clean~`.
-
-#### Internal slots
-
-- `value`: The current value of the state signal
-- `equals`: The comparison function used when changing values
-- `sinks`: Set of signals which depend on this one
-
-#### Method: `Signal.State.prototype.get`
-
-1. If the current execution context is `notifying`, throw an exception.
-1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
-1. Return this Signal's `value`.
-
-#### Method: `Signal.State.prototype.set`
-
-1. If the current execution context is `notifying`, throw an exception.
-1. Run the "set Signal value" algorithm with this Signa l and the first parameter for the value.
-1. If that algorithm returned `~clean~`, then return undefined.
-1. Set the `state` of all `sinks` of this Signal to `~dirty~` if they weren't already dirty.
-1. Set the `state` of all of the sinks' dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place).
-1. For each `~clean~` effect Signal encountered in that recursive search, if the Signal is not in the `~disposed~` state, then in depth-first order,
-    1. Set `notifying` to true while calling their `notify` method (saving aside any exception thrown, but ignoring the return value of `notify`), and then restore `notifying` to false.
-1. If any exception was thrown from the `notify` callbacks, propagate it to the caller after all `notify` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
-1. Return undefined.
-
-### The `Signal.Computed` class
-
-#### Internal slots
-
-- `value`: The previous cached value of the Signal, or `~uninitialized~` for a never-read computed Signal. The value may be an exception which gets rethrown when the value is read. Always `undefined` for effect signals.
-- `state`: May be `~clean~`, `~checked~`, `~computing~`, or `~dirty~`.
-- `sources`: An ordered set of Signals which this Signal depends on.
-- `sinks`: An ordered set of Signals which depend on this Signal.
-- `equals`: The equals method provided in the options.
-- `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
-
-#### Constructor
-
-The constructor sets
-- `callback` to its first parameter
-- `equals` based on options, defaulting to `Object.is` if absent
-- `state` to `~dirty~`
-- `value` to `~uninitialized~`
-
-#### Method: `Signal.Computed.prototype.get`
-
-1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
-1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
-1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
-    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
-    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
-1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
-
-### The `Signal.Effect` class
-
-#### Internal slots
-
-- `state`: May be `~clean~`, `~checked~`, `~running~`, `~disposed~` or `~dirty~`.
-- `sources`: An ordered set of Signals which this Signal depends on.
-- `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
-
-#### Constructor
-
-1. `callback` is set to a function wrapping its first parameter:
-   1. If this signal's `state` is `~disposed~`, throw an exception.
-   1. Call the function and return its return value.
-1. `state` is set to `~dirty~`.
-1. `notify` is set to the callback in the options.
-1. `cleanup` is set to the callback in the options.
-
-#### Method: `Signal.Effect.prototype.run`
-
-1. If the current execution context is `notifying`, throw an exception.
-1. If this Signal has the state `~running~`, throw an exception.
-1. If `computing` a computed Signal, throw an exception.
-1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
-    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, including this Signal at the end, *even if it is not marked `~dirty~`*).
-    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
-1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
-
-#### [Symbol.dispose]
-
-1. Call `cleanup` with `this` as the receiver, if `cleanup` exists.
-1. Set `state` to `~disposed~`.
-1. Remove the effect Signal from the graph by deleting it from all of its sources' sinks list, as well as setting its own sources list to the empty set.
-
-### `Signal.unsafe.untrack(cb)`
-
-1. Let c be the execution context's current `computing` state.
-1. Set `computing` to undefined.
-1. Call `cb`.
-1. Restore `computing` to c (even if `cb` threw an exception).
-1. Return the return value of `cb` (rethrowing any exception).
-
-Note: untrack doesn't get you out of the `notifying` state, which is maintained strictly.
 
 ## FAQ
 **Q**: Is it a good idea to enable application state which is distributed, rather than at the component level or at the top level of the application?
