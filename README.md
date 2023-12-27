@@ -335,7 +335,7 @@ class SimpleEffect extends Signal.Effect {
     constructor(cb) {
         super(cb, SimpleEffect.#options);
         // Run for the first time to subscribe to sources
-        this.#options.notify.call(this);
+        SimpleEffect.#options.notify.call(this);
     }
 }
 
@@ -398,20 +398,23 @@ The collaborators on the Signal proposal want to be especially conservative in h
 This section describes each of the APIs exposed to JavaScript, in terms of the algorithms that they implement. This can be thought of as a proto-specification, and is included at this early point to nail down one possible set of semantics, while being very open to changes.
 
 Some aspects of the algorithm:
-- The order of reads of Signals within a computed is significant, and is observable in the order that three types of callbacks (`notify`, `equals` and the first parameter to `new Signal.Computed`/`new Signal.Effect`) are executed. This means that the sources of a computed Signal must be stored as an ordered set, with duplicates removed.
+- The order of reads of Signals within a computed is significant, and is observable in the order that certain callbacks (`notify`, `equals`, the first parameter to `new Signal.Computed`/`new Signal.Effect`, and the `connected`/`disconnected` callbacks) are executed. This means that the sources of a computed Signal must be stored ordered.
 - These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For `notify`, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
-- The data structures are heavily circular, and some changes would be required to enable automatic garbage collection of non-effect computed Signals when the other parts of the graph remain alive. (*TODO* make these changes once we find the right algorithm, if possible.)
+- Care is taken to avoid circularities in cases of computed signals which are not "connected" (being observed by any live effect), so that they can be garbage collected independently from other parts of the signal graph. This is based on a system of generation numbers which are always collected; note that optimized implementations may also include local per-node generation numbers, or avoid tracking some numbers on disconnected signals.
 
 ### Hidden global state 
 
-Signal algorithms need to reference certain global state. In JavaScript specification terms, we refer to these as fields of the execution context.
+Signal algorithms need to reference certain global state. This state is global for the entire process, or "agent".
 
 - `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` or `.run` call, or `undefined`. Initially `undefined`.
 - `notifying`: Boolean denoting whether there is an `notify` callback currently executing. Initially `false`.
+- `generation`: An incrementing integer, starting at 0, used to track how current a value is while avoiding circularities. 
 
 ### The `Signal` namespace
 
 `Signal` is ordinary object which serves as a namespace for Signal-related classes and functions.
+
+`Signal.unsafe` is a similar inner namespace object.
 
 ### The `Signal.State` class
 
@@ -419,7 +422,8 @@ Signal algorithms need to reference certain global state. In JavaScript specific
 
 - `value`: The current value of the state signal
 - `equals`: The comparison function used when changing values
-- `
+- `connected`:
+- `disconnected`: 
 - `sinks`: Set of connected signals which depend on this one
 
 #### Constructor: `Signal(initialValue, options)`
@@ -513,7 +517,7 @@ The constructor sets
 
 1. Call `cleanup` with `this` as the receiver, if `cleanup` exists.
 1. Set `state` to `~disposed~`.
-1. Remove the effect Signal from the graph by deleting it from all of its sources' sinks list, as well as setting its own sources list to the empty set.
+1. Remove the effect Signal from the graph by deleting it from all of its sources' sinks list, as well as setting its own sources list to the empty set. If any source 
 
 #### Method: `Signal.Effect.prototype.isPending()`
 
