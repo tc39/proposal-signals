@@ -202,29 +202,44 @@ An initial idea of a Signal API is below. Note that this is just an early draft,
 
 ```ts
 // A cell of data which may change over time
-interface Signal<T> {
+// (State or Computed signal)
+interface SignalSource<T> {
     // Get the value of the Signal
     get(): T;
+
+    // Returns the subset of signal sinks which recursively
+    // lead to an Effect which has not been disposed
+    introspectSinks(): SignalSink[];
+
+    // True iff introspectSinks() is non-empty
+    isConnected(): boolean;
+}
+
+// Something which may read a signal
+// (Computed or Effect signal)
+interface SignalSink {
+    // Returns ordered list of all signals which 
+    introspectSources(): Signal[];
 }
 
 namespace Signal {
     // A read-write Signal
-    class State<T> implements Signal<T> {
+    class State<T> implements SignalSource<T> {
         // Create a state Signal starting with the value t
-        constructor(t: T, options?: SignalOptions<T>);
+        constructor(t: T, options?: SignalSourceOptions<T>);
 
         // Set the state Signal value to t
         set(t: T): void;
     }
     
     // A Signal which is a formula based on other Signals
-    class Computed<T> implements Signal<T> {
+    class Computed<T> implements SignalSource<T>, SignalSink {
         // Create a Signal which evaluates to the value of cb.call(the Signal)
-        constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
+        constructor(cb: (this: Computed<T>) => T, options?: SignalSourceOptions<T>);
     }
 
     // A reaction to computed or state signals changing
-    class Effect {
+    class Effect implements SignalSink {
         // When a (recursive) source of cb changes, call schedule
         constructor(cb: (this: Effect<T>) => T, options?: EffectOptions);
 
@@ -245,15 +260,24 @@ namespace Signal {
     }
 }
 
-type SignalComparison<T> = (this: Signal<T>, t: T, t2: T) => boolean;
+type SignalComparison<T> = (this: SignalSource<T>, t: T, t2: T) => boolean;
 
-interface SignalOptions<T> {
+interface SignalSourceOptions<T> {
     // Custom comparison function between old and new value. Default: Object.is.
     equals?: SignalComparison<T>;
+
+    // Callback called when isConnected becomes true, if it was previously false
+    connected?: (this: SignalSource<T>) => void;
+
+    // Callback called whenever isConnected becomes false, if it was previously true
+    disconnected?: (this: SignalSource<T>) => void;
 }
 
 interface EffectOptions {
+    // Called when isPending becomes true
     notify: (this: Effect) => void;
+
+    // Called when the effect is disposed
     cleanup: (this: Effect) => void;
 }
 ```
