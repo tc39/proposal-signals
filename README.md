@@ -33,15 +33,11 @@ This has a number of problems...
 
 * The `counter` setup is noisy and boilerplate-heavy.
 * The `counter` state is tightly coupled to the rendering system.
-* There is a transitive circular reference between `setCounter()` and `render()`.
 * If the `counter` changes but `parity` does not (e.g. counter goes from 2 to 4), then we do unnecessary computation of the parity and unnecessary rendering.
 * What if another part of our UI just wants to render when the `counter` updates?
 * What if another part of our UI is dependent on `isEven` or `parity` alone?
 
-Even in this relatively simple scenario, a number of issues arise quickly. We could try to work around these by introducing pub/sub for the `counter`. This would make the following improvements:
-
-* Rendering would now be decoupled from the `counter` and the circular reference would be gone.
-* Additional consumers of the `counter` could subscribe to add their own reactions to state changes.
+Even in this relatively simple scenario, a number of issues arise quickly. We could try to work around these by introducing pub/sub for the `counter`. This would allow additional consumers of the `counter` could subscribe to add their own reactions to state changes.
 
 However, we're still stuck with the following problems:
 
@@ -274,7 +270,7 @@ interface EffectOptions {
     notify: (this: Effect) => void;
 
     // Called when the effect is disposed
-    cleanup: (this: Effect) => void;
+    cleanup?: (this: Effect) => void;
 }
 ```
 
@@ -399,16 +395,16 @@ This section describes each of the APIs exposed to JavaScript, in terms of the a
 
 Some aspects of the algorithm:
 - The order of reads of Signals within a computed is significant, and is observable in the order that certain callbacks (`notify`, `equals`, the first parameter to `new Signal.Computed`/`new Signal.Effect`, and the `connected`/`disconnected` callbacks) are executed. This means that the sources of a computed Signal must be stored ordered.
-- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For `notify`, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
+- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For `notify`, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others (including `connected`/`disconnected`?) are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
 - Care is taken to avoid circularities in cases of computed signals which are not "connected" (being observed by any live effect), so that they can be garbage collected independently from other parts of the signal graph. This is based on a system of generation numbers which are always collected; note that optimized implementations may also include local per-node generation numbers, or avoid tracking some numbers on disconnected signals.
 
 ### Hidden global state 
 
-Signal algorithms need to reference certain global state. This state is global for the entire process, or "agent".
+Signal algorithms need to reference certain global state. This state is global for the entire thread, or "agent".
 
 - `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` or `.run` call, or `undefined`. Initially `undefined`.
 - `notifying`: Boolean denoting whether there is an `notify` callback currently executing. Initially `false`.
-- `generation`: An incrementing integer, starting at 0, used to track how current a value is while avoiding circularities. 
+- `generation`: An incrementing integer, starting at 0, used to track how current a value is while avoiding circularities.
 
 ### The `Signal` namespace
 
@@ -422,8 +418,8 @@ Signal algorithms need to reference certain global state. This state is global f
 
 - `value`: The current value of the state signal
 - `equals`: The comparison function used when changing values
-- `connected`:
-- `disconnected`: 
+- `connected`: The callback to be called when the signal becomes observed by an effect
+- `disconnected`: The callback to be called when the signal is no longer observed by an effect
 - `sinks`: Set of connected signals which depend on this one
 
 #### Constructor: `Signal(initialValue, options)`
@@ -479,6 +475,8 @@ The constructor sets
 - `state` to `~dirty~`
 - `value` to `~uninitialized~`
 
+With [AsyncContext](https://github.com/tc39/proposal-async-context), the callback passed to `new Signal.Computed` closes over the snapshot from when the constructor was called, and restores this snapshot during its execution.
+
 #### Method: `Signal.Computed.prototype.get`
 
 1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
@@ -488,6 +486,19 @@ The constructor sets
     1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
 1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
 
+#### Method: `Signal.State.prototype.introspectSinks()`
+
+1. Return a new Array copying the contents of `sinks`.
+
+#### Method: `Signal.State.prototype.isConnected()`
+
+1. Return true if `sinks` is non-empty.
+1. Otherwise, return false.
+
+#### Method: `Signal.State.prototype.introspectSources()`
+
+1. Return a new Array copying the contents of `sources`.
+
 ### The `Signal.Effect` class
 
 #### `Signal.Effect` internal slots
@@ -496,12 +507,14 @@ The constructor sets
 - `sources`: An ordered set of Signals which this Signal depends on.
 - `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
 
-#### Constructor: `Signal.Effect(callback, options)`
+#### Constructor: `new Signal.Effect(callback, options)`
 
 1. `callback` is set to the callback parameter.
 1. `state` is set to `~dirty~`.
 1. `notify` is set to `options.notify`.
 1. `cleanup` is set to `options.cleanup`.
+
+With [AsyncContext](https://github.com/tc39/proposal-async-context), the callback passed to `new Signal.Effect` closes over the snapshot from when the constructor was called, and restores this snapshot during its execution.
 
 #### Method: `Signal.Effect.prototype.run()`
 
@@ -525,6 +538,8 @@ The constructor sets
 1. Otherwise, return false.
 
 #### Method: `Signal.Effect.prototype.introspectSources()`
+
+1. Return a new Array copying the contents of `sources`.
 
 ### Method: `Signal.unsafe.untrack(cb)`
 
