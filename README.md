@@ -170,8 +170,7 @@ It turns out that existing Signal libraries are not all that different from each
         * However, important to not literally shadow the exact same names!
     * Tension between "usability by JS devs" and "providing all the hooks to frameworks"
         * Idea: Provide all the hooks, but include errors when misused if possible.
-        * Idea: Indicate in some names when things are unsafe (in particular `untrack`).
-        * TODO: Should more names be made more obscure to indicate badness? Are the names around `Signal.Effect` appropriate?
+        * Idea: Put subtle APIs in a `subtle` namespace
 * Be implementable and usable with good performance -- the surface API doesn't cause too much overhead
     * Enable subclassing, so that frameworks can add their own methods and fields, including private fields. This is important to avoid the need for additional allocations at the framework level. See "Memory management" below.
 
@@ -194,83 +193,80 @@ An initial idea of a Signal API is below. Note that this is just an early draft,
 ```ts
 // A cell of data which may change over time
 // (State or Computed signal)
-interface SignalSource<T> {
+interface Signal<T> {
     // Get the value of the Signal
     get(): T;
-
-    // Returns the subset of signal sinks which recursively
-    // lead to an Effect which has not been disposed
-    introspectSinks(): SignalSink[];
-
-    // True iff introspectSinks() is non-empty
-    isConnected(): boolean;
-}
-
-// Something which may read a signal
-// (Computed or Effect signal)
-interface SignalSink {
-    // Returns ordered list of all signals which this one referenced
-    // during the last time it was evaluated
-    introspectSources(): Signal[];
 }
 
 namespace Signal {
     // A read-write Signal
-    class State<T> implements SignalSource<T> {
+    class State<T> implements Signal<T> {
         // Create a state Signal starting with the value t
-        constructor(t: T, options?: SignalSourceOptions<T>);
+        constructor(t: T, options?: SignalOptions<T>);
 
         // Set the state Signal value to t
         set(t: T): void;
     }
     
     // A Signal which is a formula based on other Signals
-    class Computed<T> implements SignalSource<T>, SignalSink {
-        // Create a Signal which evaluates to the value of cb.call(the Signal)
-        constructor(cb: (this: Computed<T>) => T, options?: SignalSourceOptions<T>);
+    class Computed<T> implements Signal<T> {
+        // Create a Signal which evaluates to the value returned by the callback.
+        // Callback is called with this signal as the parameter.
+        constructor(cb: (s: Computed<T>) => T, options?: SignalOptions<T>);
     }
 
-    // A reaction to computed or state signals changing
-    class Effect implements SignalSink {
-        // When a (recursive) source of cb changes, call schedule
-        constructor(cb: (this: Effect<T>) => T, options?: EffectOptions);
-
-        // Re-run cb and set dependencies based on what is accessed
-        void run();
-
-        // True iff any source of the effect is dirty, or is a computed signal
-        // with a source which is dirty or pending and hasn't yet been re-evaluated
-        boolean isPending();
-
-        // Stop scheduling this signal, even if a dependency of cb changes
-        [Symbol.dispose]();
-    }
-
-    namespace unsafe {
+    namespace subtle {
         // Run a callback with all tracking disabled (even for nested computed).
         function untrack<T>(cb: () => T): T;
+
+        // Returns ordered list of all signals which this one referenced
+        // during the last time it was evaluated
+        function introspectSources(s: Computed | Watcher): Signal[];
+
+        // Returns the subset of signal sinks which recursively
+        // lead to an Effect which has not been disposed
+        // Note: Only watched Computed signals will be in this list.
+        function introspectSinks(s: Signal): (Computed | Watcher)[];
+
+        // True iff introspectSinks() is non-empty
+        function isWatched(s: Signal): boolean;
+
+        // Key for subtle Signal options, see interpretation below.
+        var watched: Symbol;
+        var unwatched: Symbol;
+
+        class Watcher {
+            // When a (recursive) source of Watcher is written to, call this callback,
+            // if it hasn't already been called since the last `watch` call.
+            // No signals may be read or written during the notify.
+            constructor(notify: (w: Watcher) => void);
+
+            // Add these signals to the Watcher's set, and set the watcher to run its
+            // notify callback next time any signal in the set (or one of its dependencies) changes.
+            // Can be called with no arguments just to reset the "notified" state, so that
+            // the notify callback will be invoked again.
+            watch(...s: Signal[]): void;
+
+            // Remove these signals from the watched set (e.g., for an effect which is disposed)
+            unwatch(...s: Signal[]): void;
+
+            // Returns the set of sources in the Watcher's set which are still dirty, or is a computed signal
+            // with a source which is dirty or pending and hasn't yet been re-evaluated
+            getPending(): Signal[];
+        }
     }
 }
 
-type SignalComparison<T> = (this: SignalSource<T>, t: T, t2: T) => boolean;
-
-interface SignalSourceOptions<T> {
+interface SignalOptions<T> {
     // Custom comparison function between old and new value. Default: Object.is.
-    equals?: SignalComparison<T>;
+    // The signal is passed in as an optionally-used third parameter for context.
+    equals?: (t: T, t2: T, s: Signal<T>) => boolean;
 
-    // Callback called when isConnected becomes true, if it was previously false
-    connected?: (this: SignalSource<T>) => void;
+    // Callback called when isWatched becomes true, if it was previously false
+    [Signal.subtle.watched]?: (s: Signal<T>) => void;
 
-    // Callback called whenever isConnected becomes false, if it was previously true
-    disconnected?: (this: SignalSource<T>) => void;
-}
-
-interface EffectOptions {
-    // Called when isPending becomes true
-    notify: (this: Effect) => void;
-
-    // Called when the effect is disposed
-    cleanup?: (this: Effect) => void;
+    // Callback called whenever isWatched becomes false, if it was previously true
+    [Signal.subtle.unwatched]?: (s: Signal<T>) => void;
 }
 ```
 
@@ -291,7 +287,7 @@ Computed Signals track their dependencies dynamically--each time they are run, t
 Unlike JavaScript Promises, everything in Signals runs synchronously:
 - Setting a Signal to a new value is synchronous, and this is immediately reflected when reading any computed Signal which depends on it afterwards. There is no built-in batching of this mutation.
 - Reading computed Signals is synchronous--their value is always available.
-- The `notify` callback in Effects, as explained below, runs synchronously, during the `.set()` call which triggered it (but after graph coloring has completed).
+- The `notify` callback in Watchers, as explained below, runs synchronously, during the `.set()` call which triggered it (but after graph coloring has completed).
 
 Like Promises, Signals can represent an error state: If a computed Signal's callback throws, then that error is cached just like another value, and rethrown every time the Signal is read.
 
@@ -304,59 +300,66 @@ The API here is designed to match the very rough ecosystem consensus among a lar
 - Names "state", "computed", "effect" and "Signal" itself are chosen to match names used elsewhere.
 
 The API is designed to reduce the number of allocations, to make Signals suitable for embedding in JavaScript frameworks while reaching same or better performance than existing framework-customized Signals. This implies:
-- Writable state Signals are a single object, which can be accessed and set in one. (See implications below in the "Capability separation" section.)
-- Both state, computed and effect Signals are designed to be subclassable, to facilitate frameworks' ability to add additional properties through public and private class fields (as well as methods for using that state).
-- Effects' `notify` callback is called on just one Signal; no surrounding event or array-based data structure surrounds it.
-- Various callbacks (`equals`, `notify`, the computed callback) are called with the appropriate `this`, so that a new closure isn't needed per Signal.
+- State Signals are a single writable object, which can be both accessed and set from the same reference. (See implications below in the "Capability separation" section.)
+- Both State and Computed Signals are designed to be subclassable, to facilitate frameworks' ability to add additional properties through public and private class fields (as well as methods for using that state).
+- Various callbacks (e.g., `equals`, the computed callback) are called with the relevant Signal as a parameter for context, so that a new closure isn't needed per Signal.
 
 Some error conditions enforced by this API:
-- Setting any state within any computed throws.
 - It is an error to read a computed recursively.
-- The `notify` callback of an Effect cannot read or write any signals
+- The `notify` callback of a Watcher cannot read or write any signals
 - If a computed Signal's callback throws, then subsequent accesses of the Signal rethrow that cached error, until one of the dependencies changes and it is recalculated.
-- Effect signals must be treated as reads, and cannot be read during a computed signal.
+
+Some conditions which are *not* enforced:
+- Computed Signals can write to other Signals, synchronously within their callback
+- Work which is queued by a Watcher's `notify` callback may read or write signals, making it possible to replicate [classic React antipatterns](https://react.dev/learn/you-might-not-need-an-effect) in terms of Signals!
 
 ### Implementing effects
 
-The `Effect` interface defined above gives the basis for implementing typical JS APIs for effects: callbacks which are re-run when other Signals change, purely for their side effect. The `effect` function used above in the initial example can be defined as follows:
+The `Watcher` interface defined above gives the basis for implementing typical JS APIs for effects: callbacks which are re-run when other Signals change, purely for their side effect. The `effect` function used above in the initial example can be defined as follows:
 
 ```ts
 // This function would usually live in a library/framework, not application code
 // NOTE: This scheduling logic is too basic to be useful. Do not copy/paste.
+let pending = false;
+
+let w = new Signal.subtle.Watcher(self => {
+    if (!pending) {
+        pending = true;
+        queueMicrotask(() => {
+            pending = false;
+            for (let s of self.getPending()) s.get();
+            self.watch();
+        });
+    }
+});
 
 // An effect effect Signal which evaluates to cb, which schedules a read of
 // itself on the microtask queue whenever one of its dependencies might change
-class SimpleEffect extends Signal.Effect {
-    static #options = { notify() { queueMicrotask(() => this.run()); };
-    constructor(cb) {
-        super(cb, SimpleEffect.#options);
-        // Run for the first time to subscribe to sources
-        SimpleEffect.#options.notify.call(this);
-    }
-}
-
 export function effect(cb) {
-    return new SimpleEffect(cb);
+    let destructor;
+    let c = new Signal.Computed(() => destructor = cb());
+    w.watch(c);
+    return () => { destructor?(); w.unwatch(c) };
 }
 ```
 
 The Signal API does not include any built-in function like `effect`. This is because effect scheduling is subtle and often ties into framework rendering cycles and other high-level framework-specific state or strategies which JS does not have access to.
 
-Walking through the different operations used here: The `notify` callback passed into the computed Signal constructor is the function that is called when the Signal goes from a "clean" state (where we know the cache is initialized and valid) into a "checked" or "dirty" state (where the cache might or might not be valid because at least one of the states which this recursively depends on has been changed).
+Walking through the different operations used here: The `notify` callback passed into `Watcher` constructor is the function that is called when the Signal goes from a "clean" state (where we know the cache is initialized and valid) into a "checked" or "dirty" state (where the cache might or might not be valid because at least one of the states which this recursively depends on has been changed).
 
 Calls to `notify` are ultimately triggered by a call to `.set()` on some state Signal. This call is synchronous: it happens before `.set` returns. But there's no need to worry about this callback observing the Signal graph in a half-processed state, because during a `notify` callback, no Signal can be read or written, even in an `untrack` call. Because `notify` is called during `.set()`, it is interrupting another thread of logic, which might not be complete. To read or write Signals from `notify`, schedule work to run later, e.g., by writing the Signal down in a list to later be accessed, or with `queueMicrotask` as above.
 
-Note that it is perfectly possible to use Signals effectively without `Symbol.Effect` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
+Note that it is perfectly possible to use Signals effectively without `Symbol.subtle.Watcher` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
 
 Both computed and state Signals are garbage-collected like any JS values. But effect Signals have a special way of holding things alive: If an effect Signal has had `.get()` called on it, then any computed Signals that the effect references will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `[Symbol.dispose]` to clean up effects.
 
 ### An unsound escape hatch
 
-`Signal.unsafe.untrack` is an escape hatch allowing reading Signals *without* tracking those reads. This capability is unsafe because it allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
+`Signal.subtle.untrack` is an escape hatch allowing reading Signals *without* tracking those reads. This capability is unsafe because it allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
 
 TOOD: Show example where it's a good idea to use untrack
 
-### Using connected/disconnected
+### Using watched/unwatched
 
 TODO: Show example of converting an Observable to a computed signal, subscribed only when used by an effect
 
@@ -394,9 +397,9 @@ The collaborators on the Signal proposal want to be especially conservative in h
 This section describes each of the APIs exposed to JavaScript, in terms of the algorithms that they implement. This can be thought of as a proto-specification, and is included at this early point to nail down one possible set of semantics, while being very open to changes.
 
 Some aspects of the algorithm:
-- The order of reads of Signals within a computed is significant, and is observable in the order that certain callbacks (`notify`, `equals`, the first parameter to `new Signal.Computed`/`new Signal.Effect`, and the `connected`/`disconnected` callbacks) are executed. This means that the sources of a computed Signal must be stored ordered.
-- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For `notify`, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others (including `connected`/`disconnected`?) are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
-- Care is taken to avoid circularities in cases of computed signals which are not "connected" (being observed by any live effect), so that they can be garbage collected independently from other parts of the signal graph. This is based on a system of generation numbers which are always collected; note that optimized implementations may also include local per-node generation numbers, or avoid tracking some numbers on disconnected signals.
+- The order of reads of Signals within a computed is significant, and is observable in the order that certain callbacks (which `Watcher` is invoked, `equals`, the first parameter to `new Signal.Computed`, and the `watched`/`unwatched` callbacks) are executed. This means that the sources of a computed Signal must be stored ordered.
+- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For errors thrown in the `notify` callback of a Watcher, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others (including `watched`/`unwatched`?) are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
+- Care is taken to avoid circularities in cases of computed signals which are not "connected" (being observed by any Watcher), so that they can be garbage collected independently from other parts of the signal graph. Internally, this can be implemented with a system of generation numbers which are always collected; note that optimized implementations may also include local per-node generation numbers, or avoid tracking some numbers on disconnected signals.
 
 ### Hidden global state 
 
@@ -410,7 +413,7 @@ Signal algorithms need to reference certain global state. This state is global f
 
 `Signal` is ordinary object which serves as a namespace for Signal-related classes and functions.
 
-`Signal.unsafe` is a similar inner namespace object.
+`Signal.subtle` is a similar inner namespace object.
 
 ### The `Signal.State` class
 
@@ -418,21 +421,24 @@ Signal algorithms need to reference certain global state. This state is global f
 
 - `value`: The current value of the state signal
 - `equals`: The comparison function used when changing values
-- `connected`: The callback to be called when the signal becomes observed by an effect
-- `disconnected`: The callback to be called when the signal is no longer observed by an effect
-- `sinks`: Set of connected signals which depend on this one
+- `watched`: The callback to be called when the signal becomes observed by an effect
+- `unwatched`: The callback to be called when the signal is no longer observed by an effect
+- `sinks`: Set of watched signals which depend on this one
 
 #### Constructor: `Signal(initialValue, options)`
 
 1. Set this Signal's `value` to `initialValue`.
-1. ...
+1. Set this Signal's `equals` to options?.equals
+1. Set this Signal's `watched` to options?.[Signal.subtle.watched]
+1. Set this Signal's `unwatched` to options?.[Signal.subtle.watched]
+1. Set this Signal's `sinks` to the empty set 
 1. Set `state` to `~clean~`.
-The constructor sets `value` to its parameter, `equals` based on options, and `state` to `~clean~`.
 
 #### Method: `Signal.State.prototype.get()`
 
 1. If `notifying` is true, throw an exception.
-1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
+1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set.
+1. NOTE: We do not add `computing` to this Signal's `sinks` set until it is watched by a Watcher.
 1. Return this Signal's `value`.
 
 #### Method: `Signal.State.prototype.set(newValue)`
@@ -440,21 +446,12 @@ The constructor sets `value` to its parameter, `equals` based on options, and `s
 1. If the current execution context is `notifying`, throw an exception.
 1. Run the "set Signal value" algorithm with this Signal and the first parameter for the value.
 1. If that algorithm returned `~clean~`, then return undefined.
-1. Set the `state` of all `sinks` of this Signal to `~dirty~` if they weren't already dirty.
-1. Set the `state` of all of the sinks' dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place).
-1. For each `~clean~` effect Signal encountered in that recursive search, if the Signal is not in the `~disposed~` state, then in depth-first order,
-    1. Set `notifying` to true while calling their `notify` method (saving aside any exception thrown, but ignoring the return value of `notify`), and then restore `notifying` to false.
+1. Set the `state` of all `sinks` of this Signal to (if it is a Computed Signal) `~dirty~` if they were previously clean, or (if it is a Watcher) `~pending~` if it was previously `~watching~`.
+1. Set the `state` of all of the sinks' Computed Signal dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place), or for Watchers, `~pending~` if previously `~watching~`.
+1. For each previously `~watching~` Watcher encountered in that recursive search, then in depth-first order,
+    1. Set `notifying` to true while calling their `notify` callback (saving aside any exception thrown, but ignoring the return value of `notify`), and then restore `notifying` to false.
 1. If any exception was thrown from the `notify` callbacks, propagate it to the caller after all `notify` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
 1. Return undefined.
-
-#### Method: `Signal.State.prototype.introspectSinks()`
-
-1. Return a new Array copying the contents of `sinks`.
-
-#### Method: `Signal.State.prototype.isConnected()`
-
-1. Return true if `sinks` is non-empty.
-1. Otherwise, return false.
 
 ### The `Signal.Computed` class
 
@@ -480,68 +477,48 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 #### Method: `Signal.Computed.prototype.get`
 
 1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
-1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set, and add `computing` to this Signal's `sinks` set.
+1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set.
+1. NOTE: We do not add `computing` to this Signal's `sinks` set until/unless it becomes watched by a Watcher.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
     1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
     1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
 1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
 
-#### Method: `Signal.State.prototype.introspectSinks()`
+### The `Signal.subtle.Watcher` class
 
-1. Return a new Array copying the contents of `sinks`.
+#### `Signal.subtle.Watcher` internal slots
 
-#### Method: `Signal.State.prototype.isConnected()`
+- `state`: May be `~watching~`, `~pending~` or `~waiting~`
+- `signals`: An ordered set of Signals which this Watcher is watching
+- `notifyCallback`: The callback which is called when something changes. Set to the first parameter passed to the constructor.
 
-1. Return true if `sinks` is non-empty.
-1. Otherwise, return false.
+#### Constructor: `new Signal.subtle.Watcher(callback)`
 
-#### Method: `Signal.State.prototype.introspectSources()`
+1. `state` is set to `~waiting~`.
+1. Initialize `signals` as an empty set.
+1. `notifyCallback` is set to the callback parameter.
 
-1. Return a new Array copying the contents of `sources`.
+With [AsyncContext](https://github.com/tc39/proposal-async-context), the callback passed to `new Signal.subtle.Watcher` does *not* close over the snapshot from when the constructor was called, so that contextual information around the write is visible.
 
-### The `Signal.Effect` class
+#### Method: `Signal.subtle.Watcher.prototype.watch(...signals)`
 
-#### `Signal.Effect` internal slots
+1. If any of the arguments is not a signal, throw an exception.
+1. Append all arguments to the end of this object's `signals`.
+1. Add this watcher to each of the newly watched signals as a sink.
+1. Add this watcher as a `sink` to each Signal. If this was the first sink, then recurse up to sources to add that signal as a sink, and call the `watched` callback if it exists.
 
-- `state`: May be `~clean~`, `~checked~`, `~running~`, `~disposed~` or `~dirty~`.
-- `sources`: An ordered set of Signals which this Signal depends on.
-- `callback`: The callback which is called to get the computed Signal's value. Set to the first parameter passed to the constructor.
+#### Method: `Signal.subtle.Watcher.prototype.unwatch(...signals)`
 
-#### Constructor: `new Signal.Effect(callback, options)`
+1. If any of the arguments is not a signal, or is not being watched by this watcher, throw an exception.
+1. Remove each element from signals from this object's `signals`.
+1. Remove this Watcher from that Signal's `sink` set.
+1. If any Signal's `sink` set is now empty, then remove itself as a sink from each of its sources, and call the `unwatched` callback if it exists
 
-1. `callback` is set to the callback parameter.
-1. `state` is set to `~dirty~`.
-1. `notify` is set to `options.notify`.
-1. `cleanup` is set to `options.cleanup`.
+#### Method: `Signal.subtle.Watcher.prototype.getPending()`
 
-With [AsyncContext](https://github.com/tc39/proposal-async-context), the callback passed to `new Signal.Effect` closes over the snapshot from when the constructor was called, and restores this snapshot during its execution.
+1. Return an Array containing the subset of `signals` which are in the state `dirty` or `pending`.
 
-#### Method: `Signal.Effect.prototype.run()`
-
-1. If the current execution context is `notifying`, throw an exception.
-1. If this Signal has the state `~running~` or `~disposed~`, throw an exception.
-1. If `computing` is a computed Signal, throw an exception.
-1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
-    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, including this Signal at the end, *even if it is not marked `~dirty~`*).
-    1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
-1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
-
-#### Method: `Signal.Effect.prototype[Symbol.dispose]()`
-
-1. Call `cleanup` with `this` as the receiver, if `cleanup` exists.
-1. Set `state` to `~disposed~`.
-1. Remove the effect Signal from the graph by deleting it from all of its sources' sinks list, as well as setting its own sources list to the empty set. If any source 
-
-#### Method: `Signal.Effect.prototype.isPending()`
-
-1. Return true if `state` is `~dirty~` or `~checked~`
-1. Otherwise, return false.
-
-#### Method: `Signal.Effect.prototype.introspectSources()`
-
-1. Return a new Array copying the contents of `sources`.
-
-### Method: `Signal.unsafe.untrack(cb)`
+### Method: `Signal.subtle.untrack(cb)`
 
 1. Let `c` be the execution context's current `computing` state.
 1. Set `computing` to undefined.
@@ -563,15 +540,14 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 1. Restore the previous `computing` value.
 1. Apply the "set Signal value" algorithm to the callback's return value.
 2. Set this Signal's state to `~clean~`.
-1. If that algorithm returned `~dirty~`: mark all sinks of this Signal as `~dirty~` (previously, the sinks may have been a mix of checked and dirty).
-1. Otherwise, that algorithm returned `~clean~`: In this case, for each `~checked~` sink of this Signal, if all of that Signal's sources are now clean, then mark that Signal as `~clean~` as well. Apply this cleanup step to further sinks recursively, to any newly clean Signals which have checked sinks.
+1. If that algorithm returned `~dirty~`: mark all sinks of this Signal as `~dirty~` (previously, the sinks may have been a mix of checked and dirty). (Or, if this is unwatched, then adopt a new generation number to indicate dirtiness, or something like that.)
+1. Otherwise, that algorithm returned `~clean~`: In this case, for each `~checked~` sink of this Signal, if all of that Signal's sources are now clean, then mark that Signal as `~clean~` as well. Apply this cleanup step to further sinks recursively, to any newly clean Signals which have checked sinks. (Or, if this is unwatched, somehow indicate the same, so that the cleanup can proceed lazily.)
 
 ##### Set Signal value algorithm
 
-1. If this Signal is an Effect, skip this algorithm.
 1. If this algorithm was passed a value (as opposed to an exception for rethrowing, from the recalculate dirty computed Signal algorithm):
-    1. Call this Signal's `equals` function, given this Signal as the `this` value, and passing as parameters the current `value` and the new value. If an exception is thrown, save that exception (for rethrowing when read) as the value of the Signal and continue as if the callback had returned false.
-    1. If that returned true, return `~clean~`.
+    1. Call this Signal's `equals` function, passing as parameters the current `value`, the new value, and this Signal. If an exception is thrown, save that exception (for rethrowing when read) as the value of the Signal and continue as if the callback had returned false.
+    1. If that function returned true, return `~clean~`.
 1. Set the `value` of this Signal to the parameter.
 1. Return `~dirty~`
 
@@ -592,11 +568,11 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: Is the Signal API meant to be used directly by application developers, or wrapped by frameworks?
 
-**A**: The design is intended to fit either. The core functionality (state and computed constructors, reading and writing Signals) is designed to be similar to existing popular Signal implementations. On the other hand, features like `untrack` and `Signal.Effect` are more error-prone and should probably be left to libraries and frameworks. Frameworks provide many other important features, such as managing ownership and disposal, and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems. Some frameworks may put a different skin around `Signal.State` and `Signal.Computed` for ergonomic reasons.
+**A**: The design is intended to fit either. The core functionality (state and computed constructors, reading and writing Signals) is designed to be similar to existing popular Signal implementations. On the other hand, features like `untrack` and Watchers are more error-prone and should probably be left to libraries and frameworks. Frameworks provide many other important features, such as managing ownership and disposal, and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems. Some frameworks may put a different skin around `Signal.State` and `Signal.Computed` for ergonomic reasons.
 
 **Q**: Do I have to tear down Signals related to a widget when that widget is destroyed? What is the API for that?
 
-**A**: The relevant teardown operation here is `Signal.Effect.prototype[Symbol.dispose]`. Only effect Signals need to be cleaned up, not computed Signals or state Signals--those can be garbage-collected automatically.
+**A**: The relevant teardown operation here is `Signal.subtle.Watcher.prototype.unwatch`. Only watched Signals need to be cleaned up (by unwatching them), while unwatched Signals can be garbage-collected automatically.
 
 **Q**: Do Signals work with VDOM, or directly with the underlying HTML DOM?
 
@@ -618,7 +594,7 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: Are Signals push-based or pull-based?
 
-**A**: Evaluation of computed Signals is pull-based: computed Signals are only evaluated when they are read, even if the underlying state changed. At the same time, changing state eagerly pushes cache invalidation to computed Signals which depend on it, potentially triggering a `notify` callback. So Signals may be thought of as a "push-pull" construction.
+**A**: Evaluation of computed Signals is pull-based: computed Signals are only evaluated when they are read, even if the underlying state changed. At the same time, changing state eagerly pushes cache invalidation to computed Signals which depend on it, potentially triggering a Watcher's `notify` callback. So Signals may be thought of as a "push-pull" construction.
 
 **Q**: Do Signals introduce nondeterminism into JavaScript execution?
 
@@ -626,7 +602,7 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: When I write to a state Signal, when is the update to the computed Signal scheduled?
 
-**A**: It isn't scheduled! The computed Signal will recalculate itself the next time someone reads it. Synchronously, a `notify` callback may be called, enabling frameworks to schedule a read at the time that they find appropriate.
+**A**: It isn't scheduled! The computed Signal will recalculate itself the next time someone reads it. Synchronously, a Watcher's `notify` callback may be called, enabling frameworks to schedule a read at the time that they find appropriate.
 
 **Q**: When do writes to state Signals take effect? Immediately, or are they batched?
 
@@ -648,7 +624,7 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: Why doesn't this proposal include an `effect()` function, when effects are necessary for any practical usage of Signals?
 
-**A**: Effects inherently tie into scheduling and disposal, which are managed by frameworks and outside the scope of this proposal. Instead, this proposal includes the basis for implementing effects through the more low-level `Signal.Effect` API.
+**A**: Effects inherently tie into scheduling and disposal, which are managed by frameworks and outside the scope of this proposal. Instead, this proposal includes the basis for implementing effects through the more low-level `Signal.subtle.Watcher` API.
 
 **Q**: Why are subscriptions automatic rather than providing a manual interface?
 
