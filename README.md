@@ -211,8 +211,8 @@ namespace Signal {
     // A Signal which is a formula based on other Signals
     class Computed<T> implements Signal<T> {
         // Create a Signal which evaluates to the value returned by the callback.
-        // Callback is called with this signal as the parameter.
-        constructor(cb: (s: Computed<T>) => T, options?: SignalOptions<T>);
+        // Callback is called with this signal as the this value.
+        constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
     }
 
     namespace subtle {
@@ -239,7 +239,7 @@ namespace Signal {
             // When a (recursive) source of Watcher is written to, call this callback,
             // if it hasn't already been called since the last `watch` call.
             // No signals may be read or written during the notify.
-            constructor(notify: (w: Watcher) => void);
+            constructor(notify: (this: Watcher) => void);
 
             // Add these signals to the Watcher's set, and set the watcher to run its
             // notify callback next time any signal in the set (or one of its dependencies) changes.
@@ -259,14 +259,14 @@ namespace Signal {
 
 interface SignalOptions<T> {
     // Custom comparison function between old and new value. Default: Object.is.
-    // The signal is passed in as an optionally-used third parameter for context.
-    equals?: (t: T, t2: T, s: Signal<T>) => boolean;
+    // The signal is passed in as the this value for context.
+    equals?: (this: Signal<T>, t: T, t2: T) => boolean;
 
     // Callback called when isWatched becomes true, if it was previously false
-    [Signal.subtle.watched]?: (s: Signal<T>) => void;
+    [Signal.subtle.watched]?: (this: Signal<T>) => void;
 
     // Callback called whenever isWatched becomes false, if it was previously true
-    [Signal.subtle.unwatched]?: (s: Signal<T>) => void;
+    [Signal.subtle.unwatched]?: (this: Signal<T>) => void;
 }
 ```
 
