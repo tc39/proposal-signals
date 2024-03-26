@@ -10,5 +10,11 @@
     "watch": "tsc -b tsconfig.json -watch"
   },
   "author": "EisenbergEffect",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "tslib": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  }
 }

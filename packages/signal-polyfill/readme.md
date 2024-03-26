@@ -1,8 +1,8 @@
 # Signal Polyfill
 
-A "signal" is a proposed first-class JavaScript data type that enables one-way data flow through cells of state or computations derived from other data.
+A "signal" is a proposed first-class JavaScript data type that enables one-way data flow through cells of state or computations derived from other state/computations.
 
-This is a polyfill for the `Signal` API that makes these capabilities available in browsers that don't yet support them natively.
+This is a polyfill for the `Signal` API.
 
 # Examples
 
