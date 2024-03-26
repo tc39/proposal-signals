@@ -1,20 +1,22 @@
 {
   "name": "signal-polyfill",
   "version": "0.1.0",
-  "description": "A polyfill for the TC39 Signals proposal.",
+  "description": "A polyfill for the TC39 Signal proposal.",
   "main": "dist/index.js",
   "type": "module",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "watch": "tsc -b tsconfig.json -watch"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest"
   },
   "author": "EisenbergEffect",
   "license": "MIT",
-  "dependencies": {
-    "tslib": "latest"
-  },
   "devDependencies": {
-    "typescript": "latest"
+    "@types/node": "^20.11.25",
+    "typescript": "latest",
+    "vite": "^5.2.6",
+    "vite-plugin-dts": "^3.7.3",
+    "vitest": "^1.4.0"
   }
 }

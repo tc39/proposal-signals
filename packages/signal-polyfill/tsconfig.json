@@ -9,7 +9,6 @@
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-    "importHelpers": true,
     "noEmitOnError": false,
     "lib": [
       "DOM",
