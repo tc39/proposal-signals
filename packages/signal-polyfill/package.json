@@ -1,0 +1,14 @@
+{
+  "name": "signal-polyfill",
+  "version": "0.1.0",
+  "description": "A polyfill for the TC39 Signals proposal.",
+  "main": "dist/index.js",
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "watch": "tsc -b tsconfig.json -watch"
+  },
+  "author": "EisenbergEffect",
+  "license": "MIT"
+}
