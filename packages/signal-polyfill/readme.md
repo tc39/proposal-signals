@@ -65,3 +65,36 @@ export function effect(callback) {
 
 > [!IMPORTANT]
 > The `Signal.subtle` APIs are so named in order to communicate that their correct use requires careful attention to detail. These APIs are not targeted at application-level code, but rather at framework/library authors.
+
+### Using signals with decorators
+
+```js
+import { Signal } from "signal-polyfill";
+
+export function signal(target) {
+  const { get } = target;
+
+  return {
+    get() {
+      return get.call(this).get();
+    },
+
+    set(value) {
+      get.call(this).set(value);
+    },
+    
+    init(value) {
+      return new Signal.State(value);
+    },
+  };
+}
+
+export class Person {
+  @signal accessor firstName = "";
+  @signal accessor lastName = "";
+
+  get fullName() {
+    return `${this.firstName} ${this.lastName}`;
+  }
+}
+```
