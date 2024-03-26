@@ -4,9 +4,9 @@ A "signal" is a proposed first-class JavaScript data type that enables one-way d
 
 This is a polyfill for the `Signal` API.
 
-# Examples
+## Examples
 
-## Using signals
+### Using signals
 
 ```js
 import { Signal } from "signal-polyfill";
@@ -66,7 +66,7 @@ export function effect(callback) {
 > [!IMPORTANT]
 > The `Signal.subtle` APIs are so named in order to communicate that their correct use requires careful attention to detail. These APIs are not targeted at application-level code, but rather at framework/library authors.
 
-### Using signals with decorators
+### Combining signals and decorators
 
 ```js
 import { Signal } from "signal-polyfill";
