@@ -49,17 +49,20 @@ function processPending() {
 }
 
 export function effect(callback) {
-  let onUnwatch;
-  const computed = new Signal.Computed(() => onUnwatch = callback(), {
-    [Signal.subtle.unwatched]() {
-      typeof onUnwatch === "function" && onUnwatch();
-    }
+  let cleanup;
+  
+  const computed = new Signal.Computed(() => {
+    typeof cleanup === "function" && cleanup();
+    cleanup = callback();
   });
-
+  
   w.watch(computed);
   computed.get();
-
-  return () => w.unwatch(computed);
+  
+  return () => {
+    w.unwatch(computed);
+    typeof cleanup === "function" && cleanup();
+  };
 }
 ```
 
