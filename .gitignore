@@ -44,3 +44,6 @@ pnpm-lock.yaml
 
 # Build directory
 build
+dist/
+*.tsbuildinfo
+.DS_Store
