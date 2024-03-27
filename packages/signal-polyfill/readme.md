@@ -42,6 +42,12 @@ Depending on how the effect is implemented, the above code could result in an in
 
 ### Creating a simple effect
 
+* You can use `Signal.subtle.Watch(callback)` combined with `Signal.Computed(callback)` to create a simple _effect_ implementation.
+* The `Signal.subtle.Watch` `callback` is invoked synchronously when a watched signal becomes dirty.
+* To batch effect updates, library authors are expected to implement their own schedulers.
+* Use `Signal.subtle.Watch#getPending()` to retrieve an array of dirty signals.
+* Calling `Signal.subtle.Watch#watch()` with no arguments will re-watch the list of tracked signals again.
+
 ```js
 import { Signal } from "signal-polyfill";
 
