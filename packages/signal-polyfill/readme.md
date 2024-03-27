@@ -87,6 +87,8 @@ export function effect(callback) {
 
 ### Combining signals and decorators
 
+A class accessor decorator can be combined with the `Signal.State()` API to enable improved DX.
+
 ```js
 import { Signal } from "signal-polyfill";
 
@@ -107,13 +109,26 @@ export function signal(target) {
     },
   };
 }
+```
 
-export class Person {
-  @signal accessor firstName = "";
-  @signal accessor lastName = "";
+The above decorator can be used on public or **private** accessors, enabling reactivity while carefully controlling state mutations.
 
-  get fullName() {
-    return `${this.firstName} ${this.lastName}`;
+```js
+export class Counter {
+  @signal accessor #value = 0;
+
+  get value() {
+    return this.#value;
+  }
+
+  increment() {
+    this.#value++;
+  }
+
+  decrement() {
+    if (this.#value > 0) {
+      this.#value--;
+    }
   }
 }
 ```
