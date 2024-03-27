@@ -8,6 +8,9 @@ This is a polyfill for the `Signal` API.
 
 ### Using signals
 
+* Use `Signal.State(value)` to create a single "cell" of data that can flow through the unidirectional state graph.
+* Use `Signal.Computed(callback)` to define a computation based on state or other computations flowing through the graph.
+
 ```js
 import { Signal } from "signal-polyfill";
 import { effect } from "./effect.js";
@@ -16,13 +19,26 @@ const counter = new Signal.State(0);
 const isEven = new Signal.Computed(() => (counter.get() & 1) == 0);
 const parity = new Signal.Computed(() => isEven.get() ? "even" : "odd");
 
-effect(() => console.log(parity.get()));
+effect(() => console.log(parity.get())); // Console logs "even" immediately.
+setInterval(() => counter.set(counter.get() + 1), 1000); // Changes the counter every 1000ms.
 
-setInterval(() => counter.set(counter.get() + 1), 1000);
+// effect triggers console log "odd"
+// effect triggers console log "even"
+// effect triggers console log "odd"
+// ...
 ```
 
-> [!NOTE]
-> The signal proposal does not include an `effect` API, since such APIs are often deeply integrated with rendering and batch strategies that are highly framework/library dependent. However, the proposal does seek to define a set of primitives that library authors can use to implement their own effects.
+The signal proposal does not include an `effect` API, since such APIs are often deeply integrated with rendering and batch strategies that are highly framework/library dependent. However, the proposal does seek to define a set of primitives that library authors can use to implement their own effects.
+
+When working directly with library effect APIs, always be sure to understand the behavior of the `effect` implementation. While the signal algorithm is standardized, effects are not and may vary. To illustrate this, have a look at this code:
+
+```js
+counter.get(); // 0
+effect(() => counter.set(counter.get() + 1)); // Infinite loop???
+counter.get(); // 1
+```
+
+Depending on how the effect is implemented, the above code could result in an infinite loop. It's also important to note that running the effect, in this case, causes an immediate invocation of the callback, changing the value of the counter.
 
 ### Creating a simple effect
 
