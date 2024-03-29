@@ -447,6 +447,22 @@ describe("Cycles", () => {
     const c3 = new Signal.Computed(() => c2.get());
     expect(() => c3.get()).toThrow();
   });
+  it("detects cycles created during recomputation", () => {
+    const s = new Signal.State(false);
+
+    const c1Spy = vi.fn(() => {
+      if (s.get()) c2.get();
+      return 1;
+    });
+    const c1 = new Signal.Computed(c1Spy);
+    const c2Spy = vi.fn(() => c1.get());
+    const c2 = new Signal.Computed(c2Spy);
+
+    expect(() => c2.get()).not.toThrow();
+    s.set(true);
+    expect(() => c2.get()).toThrow('cycle');
+    expect(c2Spy).toBeCalledTimes(1);
+  });
 });
 
 describe("Pruning", () => {
