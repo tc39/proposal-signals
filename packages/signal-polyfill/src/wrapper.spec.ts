@@ -613,6 +613,51 @@ describe("Custom equality", () => {
     expect(c.get()).toBe(2);
     expect(n).toBe(3);
   });
+  it("does not leak tracking information", () => {
+    const exact = new Signal.State(1);
+    const epsilon = new Signal.State(0.1);
+    const force = new Signal.State(null, { equals: () => false });
+
+    const cutoff = vi.fn((a, b) => Math.abs(a - b) < epsilon.get());
+    const innerFn = vi.fn(() => exact.get());
+    const inner = new Signal.Computed(innerFn, {
+      equals: cutoff
+    });
+
+    const outerFn = vi.fn(() => {
+      force.get();
+      return inner.get();
+    });
+    const outer = new Signal.Computed(outerFn);
+
+    outer.get();
+
+    expect(innerFn).toBeCalledTimes(1);
+    expect(outerFn).toBeCalledTimes(1);
+
+    exact.set(2);
+    force.set(null);
+
+    // Checks `force` first, and decides `outer` needs to rerun (without having
+    // to recheck `inner` ahead of time).
+    outer.get()
+
+    expect(innerFn).toBeCalledTimes(2);
+    expect(outerFn).toBeCalledTimes(2);
+    expect(cutoff).toBeCalledTimes(1);
+
+    // When we change `epsilon`, which Computeds should rerun?
+    epsilon.set(0.2);
+    outer.get();
+
+    // In this implementation it's `outer`, and not `inner`?
+    expect(innerFn).toBeCalledTimes(2);
+    expect(outerFn).toBeCalledTimes(3);
+
+    // ... Which is probably a bad idea, because if we had an `outer2` identical
+    // to `outer` and ran it second, it would _not_ capture the leaked tracking
+    // effect from `cutoff` and would not behave identically to `outer`!
+  });
 });
 
 describe("Receivers", () => {
