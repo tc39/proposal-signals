@@ -1,9 +1,9 @@
 # 🚦 JavaScript Signals standard proposal🚦
+<img align=right src="signals-logo.png" alt="Signals logo" width=300 height=300>
+
 Stage 0
 
 Authors: Rob Eisenberg and Daniel Ehrenberg
-
-<img align=right src="signals-logo.png" alt="Signals logo" width=300 height=300>
 
 This document describes an early common direction for signals in JavaScript, similar to the Promises A+ effort which preceded the Promises standardized by TC39 in ES2015. Try it for yourself, using [a polyfill](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill).
 
