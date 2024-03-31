@@ -114,8 +114,11 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
 
       const prevConsumer = consumerBeforeComputation(node);
       let newValue: unknown;
+      let wasEqual = false;
       try {
         newValue = node.computation.call(node.wrapper);
+        const oldOk = oldValue !== UNSET && oldValue !== ERRORED;
+        wasEqual = oldOk && node.equal.call(node.wrapper, oldValue, newValue);
       } catch (err) {
         newValue = ERRORED;
         node.error = err;
@@ -123,8 +126,7 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
         consumerAfterComputation(node, prevConsumer);
       }
 
-      if (oldValue !== UNSET && oldValue !== ERRORED && newValue !== ERRORED &&
-          node.equal.call(node.wrapper, oldValue, newValue)) {
+      if (wasEqual) {
         // No change to `valueVersion` - old and new values are
         // semantically equivalent.
         node.value = oldValue;

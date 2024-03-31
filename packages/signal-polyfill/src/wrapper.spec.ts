@@ -434,6 +434,22 @@ describe("Errors", () => {
     s.set("second");
     expect(n).toBe(2);
   });
+  it("are cached by computed signals when equals throws", () => {
+    const s = new Signal.State(0);
+    const cSpy = vi.fn(() => s.get());
+    const c = new Signal.Computed(cSpy, {
+      equals() { throw new Error("equals"); },
+    });
+
+    c.get();
+    s.set(1);
+
+    // Error is cached; c throws again without needing to rerun.
+    expect(() => c.get()).toThrowError("equals");
+    expect(cSpy).toBeCalledTimes(2);
+    expect(() => c.get()).toThrowError("equals");
+    expect(cSpy).toBeCalledTimes(2);
+  })
 });
 
 describe("Cycles", () => {
@@ -616,7 +632,7 @@ describe("Custom equality", () => {
   it("does not leak tracking information", () => {
     const exact = new Signal.State(1);
     const epsilon = new Signal.State(0.1);
-    const force = new Signal.State(null, { equals: () => false });
+    const counter = new Signal.State(1);
 
     const cutoff = vi.fn((a, b) => Math.abs(a - b) < epsilon.get());
     const innerFn = vi.fn(() => exact.get());
@@ -625,38 +641,35 @@ describe("Custom equality", () => {
     });
 
     const outerFn = vi.fn(() => {
-      force.get();
+      counter.get();
       return inner.get();
     });
     const outer = new Signal.Computed(outerFn);
 
     outer.get();
 
+    // Everything runs the first time.
     expect(innerFn).toBeCalledTimes(1);
     expect(outerFn).toBeCalledTimes(1);
 
     exact.set(2);
-    force.set(null);
-
-    // Checks `force` first, and decides `outer` needs to rerun (without having
-    // to recheck `inner` ahead of time).
+    counter.set(2);
     outer.get()
 
+    // `outer` reruns because `counter` changed, `inner` reruns when called by
+    // `outer`, and `cutoff` is called for the first time.
     expect(innerFn).toBeCalledTimes(2);
     expect(outerFn).toBeCalledTimes(2);
     expect(cutoff).toBeCalledTimes(1);
 
-    // When we change `epsilon`, which Computeds should rerun?
     epsilon.set(0.2);
     outer.get();
 
-    // In this implementation it's `outer`, and not `inner`?
-    expect(innerFn).toBeCalledTimes(2);
-    expect(outerFn).toBeCalledTimes(3);
-
-    // ... Which is probably a bad idea, because if we had an `outer2` identical
-    // to `outer` and ran it second, it would _not_ capture the leaked tracking
-    // effect from `cutoff` and would not behave identically to `outer`!
+    // Changing something `cutoff` depends on makes `inner` need to rerun, but
+    // (since the new and old values are equal) not `outer`.
+    expect(innerFn).toBeCalledTimes(3);
+    expect(outerFn).toBeCalledTimes(2);
+    expect(cutoff).toBeCalledTimes(2);
   });
 });
 
