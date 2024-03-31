@@ -1,5 +1,5 @@
 # 🚦 JavaScript Signals standard proposal🚦
-<img align=right src="signals-logo.png" alt="Signals logo" width=300>
+<img align=right src="signals-logo.png" alt="Signals logo" width=100>
 
 Stage 0
 
