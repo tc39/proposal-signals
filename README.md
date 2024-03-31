@@ -162,9 +162,6 @@ It turns out that existing Signal libraries are not all that different from each
 * Discourage/prohibit naive misuse of synchronous reactions.
     * Soundness risk: it may expose "glitches" if improperly used: If rendering is done immediately when a Signal is set, it may expose incomplete application state to the end user. Therefore, this feature should only be used to intelligently schedule work for later, once application logic is finished.
     * Solution: Disallow reading and writing any Signal from within a synchronous reaction callback
-* Discourage `untrack` and mark its unsound nature
-    * Soundness risk: allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
-    * Solution: The API is marked "unsafe" in the name.
 * Note: This proposal does allow signals to be both read and written from computed and effect signals, without restricting writes that come after reads, despite the soundness risk. This decision was taken to preserve flexibility and compatibility in integration with frameworks. 
 
 ### Surface API
