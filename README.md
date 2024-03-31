@@ -52,7 +52,7 @@ However, we're still stuck with the following problems:
 
 * The render function, which is only dependent on `parity` must instead "know" that it actually needs to subscribe to `counter`.
 * It isn't possible to update UI based on either `isEven` or `parity` alone, without directly interacting with `counter`.
-* We've increased our boilerplate.
+* We've increased our boilerplate. Any time you are using something, it's not just a matter of calling a fuction or reading a variable, but instead subscribing and doing updates there. Managing unsubscription is also especially complicated.
 
 Now, we could solve a couple issues by adding pub/sub not just to `counter` but also to `isEven` and `parity`. We would then have to subscribe `isEven` to `counter`,  `parity` to `isEven`, and `render` to `parity`. Unfortunately, not only has our boilerplate code exploded, but we're stuck with a ton of bookkeeping of subscriptions, and a potential memory leak disaster if we don't properly clean everything up in the right way. So, we've solved some issues but created a whole new category of problems and a lot of code. To make matters worse, we have to go through this entire process for every piece of state in our system.
 
@@ -228,6 +228,9 @@ namespace Signal {
         // Run a callback with all tracking disabled (even for nested computed).
         function untrack<T>(cb: () => T): T;
 
+        // Get the current computed signal which is tracking any signal reads, if any
+        function currentComputed(): Computed | null;
+
         // Returns ordered list of all signals which this one referenced
         // during the last time it was evaluated.
         // For a Watcher, lists the set of signals which it is watching.
@@ -311,14 +314,12 @@ Like Promises, Signals can represent an error state: If a computed Signal's call
 
 A `Signal` instance represents the capability to read a dynamically changing value whose updates are tracked over time. It also implicitly includes the capability to subscribe to the Signal, implicitly through a tracked access from another computed Signal.
 
-The API here is designed to match the very rough ecosystem consensus among a large fraction of Signal libraries:
-- Access is through calls to `get`, e.g., `mySignal.get()` (both for computed and state). [Note: this disagrees with all popular signal APIs, which either use a `.value`-style accessor, or `signal()` call syntax.]
-- Names "state", "computed", "effect" and "Signal" itself are chosen to match names used elsewhere.
+The API here is designed to match the very rough ecosystem consensus among a large fraction of Signal libraries in the use of names like "signal", "computed" and "state". However, access to Computed and State Signals is through a `.get()` method, which disagrees with all popular Signal APIs, which either use a `.value`-style accessor, or `signal()` call syntax.
 
 The API is designed to reduce the number of allocations, to make Signals suitable for embedding in JavaScript frameworks while reaching same or better performance than existing framework-customized Signals. This implies:
 - State Signals are a single writable object, which can be both accessed and set from the same reference. (See implications below in the "Capability separation" section.)
 - Both State and Computed Signals are designed to be subclassable, to facilitate frameworks' ability to add additional properties through public and private class fields (as well as methods for using that state).
-- Various callbacks (e.g., `equals`, the computed callback) are called with the relevant Signal as a parameter for context, so that a new closure isn't needed per Signal.
+- Various callbacks (e.g., `equals`, the computed callback) are called with the relevant Signal as the `this` value for context, so that a new closure isn't needed per Signal. Instead, context can be saved in extra properties of the signal itself.
 
 Some error conditions enforced by this API:
 - It is an error to read a computed recursively.
@@ -353,10 +354,10 @@ let w = new Signal.subtle.Watcher(self => {
 // itself on the microtask queue whenever one of its dependencies might change
 export function effect(cb) {
     let destructor;
-    let c = new Signal.Computed(() => destructor = cb());
+    let c = new Signal.Computed(() => { destructor.?(); destructor = cb(); });
     w.watch(c);
     c.get();
-    return () => { destructor?(); w.unwatch(c) };
+    return () => { destructor.?(); w.unwatch(c) };
 }
 ```
 
@@ -368,7 +369,7 @@ Calls to `notify` are ultimately triggered by a call to `.set()` on some state S
 
 Note that it is perfectly possible to use Signals effectively without `Symbol.subtle.Watcher` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
 
-Both computed and state Signals are garbage-collected like any JS values. But effect Signals have a special way of holding things alive: If an effect Signal has had `.get()` called on it, then any computed Signals that the effect references will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `[Symbol.dispose]` to clean up effects.
+Both computed and state Signals are garbage-collected like any JS values. But Watchers have a special way of holding things alive: Any Signals which are watched by a Watcher will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `Watcher.prototype.unwatch` to clean up effects.
 
 ### An unsound escape hatch
 
@@ -418,8 +419,8 @@ This section describes each of the APIs exposed to JavaScript, in terms of the a
 
 Some aspects of the algorithm:
 - The order of reads of Signals within a computed is significant, and is observable in the order that certain callbacks (which `Watcher` is invoked, `equals`, the first parameter to `new Signal.Computed`, and the `watched`/`unwatched` callbacks) are executed. This means that the sources of a computed Signal must be stored ordered.
-- These three callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For errors thrown in the `notify` callback of a Watcher, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others (including `watched`/`unwatched`?) are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
-- Care is taken to avoid circularities in cases of computed signals which are not "connected" (being observed by any Watcher), so that they can be garbage collected independently from other parts of the signal graph. Internally, this can be implemented with a system of generation numbers which are always collected; note that optimized implementations may also include local per-node generation numbers, or avoid tracking some numbers on disconnected signals.
+- These four callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For errors thrown in the `notify` callback of a Watcher, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others (including `watched`/`unwatched`?) are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
+- Care is taken to avoid circularities in cases of computed signals which are not "watched" (being observed by any Watcher), so that they can be garbage collected independently from other parts of the signal graph. Internally, this can be implemented with a system of generation numbers which are always collected; note that optimized implementations may also include local per-node generation numbers, or avoid tracking some numbers on watched signals.
 
 ### Hidden global state 
 
@@ -593,15 +594,15 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: Do Signals work with VDOM, or directly with the underlying HTML DOM?
 
-**A**: Yes! Signals are independent of rendering technology. Existing JavaScript frameworks which use Signal-like constructs integrate with VDOM (e.g., Vue), the native DOM (e.g., Solid) and a combination (e.g., Preact). The same will be possible with built-in Signals.
+**A**: Yes! Signals are independent of rendering technology. Existing JavaScript frameworks which use Signal-like constructs integrate with VDOM (e.g., Preact), the native DOM (e.g., Solid) and a combination (e.g., Vue). The same will be possible with built-in Signals.
 
 **Q**: Is it going to be ergonomic to use Signals in the context of class-based frameworks like Angular and Lit? What about compiler-based frameworks like Svelte?
 
-**A**: Class fields can be made Signal-based with a simple accessor decorator, as shown in (link to the below content). Signals are very closely aligned to Svelte 5's Runes--it is simple for a compiler to transform runes to the Signal API defined here, and in fact this is what Svelte 5 does internally (but with its own Signals library).
+**A**: Class fields can be made Signal-based with a simple accessor decorator, as shown in [the Signal polyfill readme](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill#combining-signals-and-decorators). Signals are very closely aligned to Svelte 5's Runes--it is simple for a compiler to transform runes to the Signal API defined here, and in fact this is what Svelte 5 does internally (but with its own Signals library).
 
 **Q**: Do Signals work with SSR? Hydration? Resumability?
 
-**A**: Yes. Qwik uses Signals to good effect with both of these properties, and other frameworks have other well-developed approaches to hydration with Signals with different tradeoffs. One possible extension of Signals to support SSR and resumability adds introspection and incremental construction of the Signal graph; we'll be researching whether this capability is necessary to include in the proposal to make SSR work in practice.
+**A**: Yes. Qwik uses Signals to good effect with both of these properties, and other frameworks have other well-developed approaches to hydration with Signals with different tradeoffs. We think that it is possible to model Qwik's resumable Signals using a State and Computed signal hooked together, and plan to prove this out in code.
 
 **Q**: Do Signals work with one-way data flow like React does?
 
