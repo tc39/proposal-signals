@@ -41,6 +41,10 @@ type SignalNode,
 
 const NODE: unique symbol = Symbol("node");
 
+let isState: (s: any) => boolean,
+    isComputed: (s: any) => boolean,
+    isWatcher: (s: any) => boolean;
+
 // eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace Signal {
 // A read-write Signal
@@ -48,9 +52,8 @@ export class State<T> {
   readonly [NODE]: SignalNode<T>;
   #brand() {}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static isState(s: any): s is State<any> {
-    return #brand in s;
+  static {
+    isState = s => #brand in s;
   }
 
   constructor(initialValue: T, options: Signal.Options<T> = {}) {
@@ -69,7 +72,7 @@ export class State<T> {
   }
 
   public get(): T {
-    if (!State.isState(this))
+    if (!isState(this))
       throw new TypeError(
         "Wrong receiver type for Signal.State.prototype.get",
       );
@@ -77,7 +80,7 @@ export class State<T> {
   }
 
   public set(newValue: T): void {
-    if (!State.isState(this))
+    if (!isState(this))
       throw new TypeError(
         "Wrong receiver type for Signal.State.prototype.set",
       );
@@ -97,8 +100,8 @@ export class Computed<T> {
 
   #brand() {}
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static isComputed(c: any): c is Computed<any> {
-    return #brand in c;
+  static {
+    isComputed = (c: any) => #brand in c;
   }
 
   // Create a Signal which evaluates to the value returned by the callback.
@@ -120,7 +123,7 @@ export class Computed<T> {
   }
 
   get(): T {
-    if (!Computed.isComputed(this))
+    if (!isComputed(this))
       throw new TypeError(
         "Wrong receiver type for Signal.Computed.prototype.get",
       );
@@ -151,7 +154,7 @@ export namespace subtle {
   // Returns ordered list of all signals which this one referenced
   // during the last time it was evaluated
   export function introspectSources(sink: AnySink): AnySignal[] {
-    if (!Computed.isComputed(sink) && !Watcher.isWatcher(sink)) {
+    if (!isComputed(sink) && !isWatcher(sink)) {
       throw new TypeError(
         "Called introspectSources without a Computed or Watcher argument",
       );
@@ -163,29 +166,38 @@ export namespace subtle {
   // lead to an Effect which has not been disposed
   // Note: Only watched Computed signals will be in this list.
   export function introspectSinks(signal: AnySignal): AnySink[] {
-    if (!Computed.isComputed(signal) && !State.isState(signal)) {
+    if (!isComputed(signal) && !isState(signal)) {
       throw new TypeError("Called introspectSinks without a Signal argument");
     }
     return signal[NODE].liveConsumerNode?.map((n) => n.wrapper) ?? [];
   }
 
   // True iff introspectSinks() is non-empty
-  export function isWatched(signal: AnySignal): boolean {
-    if (!Computed.isComputed(signal) && !State.isState(signal)) {
-      throw new TypeError("Called isWatched without a Signal argument");
+  export function hasSinks(signal: AnySignal): boolean {
+    if (!isComputed(signal) && !isState(signal)) {
+      throw new TypeError("Called hasSinks without a Signal argument");
     }
     const liveConsumerNode = signal[NODE].liveConsumerNode;
     if (!liveConsumerNode) return false;
     return liveConsumerNode.length > 0;
   }
 
+  // True iff introspectSources() is non-empty
+  export function hasSources(signal: AnySink): boolean {
+    if (!isComputed(signal) && !isWatcher(signal)) {
+      throw new TypeError("Called hasSources without a Computed or Watcher argument");
+    }
+    const producerNode = signal[NODE].producerNode;
+    if (!producerNode) return false;
+    return producerNode.length > 0;
+  }
+
   export class Watcher {
     readonly [NODE]: ReactiveNode;
 
     #brand() {}
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    static isWatcher(w: any): w is Watcher {
-      return #brand in w;
+    static {
+      isWatcher = (w: any): w is Watcher => #brand in w;
     }
 
     // When a (recursive) source of Watcher is written to, call this callback,
@@ -203,7 +215,7 @@ export namespace subtle {
 
     #assertSignals(signals: AnySignal[]): void {
       for (const signal of signals) {
-        if (!Computed.isComputed(signal) && !State.isState(signal)) {
+        if (!isComputed(signal) && !isState(signal)) {
           throw new TypeError(
             "Called watch/unwatch without a Computed or State argument",
           );
@@ -216,7 +228,7 @@ export namespace subtle {
     // Can be called with no arguments just to reset the "notified" state, so that
     // the notify callback will be invoked again.
     watch(...signals: AnySignal[]): void {
-      if (!Watcher.isWatcher(this)) {
+      if (!isWatcher(this)) {
         throw new TypeError("Called unwatch without Watcher receiver");
       }
       this.#assertSignals(signals);
@@ -232,7 +244,7 @@ export namespace subtle {
 
     // Remove these signals from the watched set (e.g., for an effect which is disposed)
     unwatch(...signals: AnySignal[]): void {
-      if (!Watcher.isWatcher(this)) {
+      if (!isWatcher(this)) {
         throw new TypeError("Called unwatch without Watcher receiver");
       }
       this.#assertSignals(signals);
@@ -269,7 +281,7 @@ export namespace subtle {
     // Returns the set of computeds in the Watcher's set which are still yet
     // to be re-evaluated
     getPending(): Computed<any>[] {
-      if (!Watcher.isWatcher(this)) {
+      if (!isWatcher(this)) {
         throw new TypeError("Called getPending without Watcher receiver");
       }
       const node = this[NODE];
@@ -291,10 +303,10 @@ export interface Options<T> {
   // The signal is passed in as an optionally-used third parameter for context.
   equals?: (this: AnySignal<T>, t: T, t2: T) => boolean;
 
-  // Callback called when isWatched becomes true, if it was previously false
+  // Callback called when hasSinks becomes true, if it was previously false
   [Signal.subtle.watched]?: (this: AnySignal<T>) => void;
 
-  // Callback called whenever isWatched becomes false, if it was previously true
+  // Callback called whenever hasSinks becomes false, if it was previously true
   [Signal.subtle.unwatched]?: (this: AnySignal<T>) => void;
 }
 }
