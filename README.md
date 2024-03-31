@@ -151,7 +151,7 @@ It turns out that existing Signal libraries are not all that different from each
 * Enable JS frameworks to do their own scheduling. No Promise-style built-in forced-on scheduling.
     * Synchronous reactions are needed to enable scheduling later work based on framework logic.
     * Writes are synchronous and immediately take effect (a framework which batches writes can do that on top).
-    * It is possible to separate checking whether a effect may be "dirty" from actually running the effect (enabling a two-stage effect scheduler). 
+    * It is possible to separate checking whether an effect may be "dirty" from actually running the effect (enabling a two-stage effect scheduler). 
 * Ability to read Signals *without* triggering dependencies to be recorded (`untrack`)
 * Enable composition of different codebases which use Signals/reactivity, e.g.,
     * Using multiple frameworks together as far as tracking/reactivity itself goes (modulo omissions, see below)
@@ -174,7 +174,7 @@ It turns out that existing Signal libraries are not all that different from each
     * The semantics are able to express the valid patterns enabled by different frameworks. For example, it should be possible for these Signals to be the basis of either immediately-reflected writes or writes which are batched and applied later.
 * It would be nice if this API is usable directly by JavaScript developers.
     * If a feature matches with an ecosystem concept, using common vocabulary is good.
-        * However, important to not literally shadow the exact same names!
+        * However, it is important to not literally shadow the exact same names!
     * Tension between "usability by JS devs" and "providing all the hooks to frameworks"
         * Idea: Provide all the hooks, but include errors when misused if possible.
         * Idea: Put subtle APIs in a `subtle` namespace, similar to [`crypto.subtle`](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/subtle), to mark the line between APIs which are good to use for most developers, and the more advanced ones.
@@ -432,7 +432,7 @@ Signal algorithms need to reference certain global state. This state is global f
 
 ### The `Signal` namespace
 
-`Signal` is ordinary object which serves as a namespace for Signal-related classes and functions.
+`Signal` is an ordinary object which serves as a namespace for Signal-related classes and functions.
 
 `Signal.subtle` is a similar inner namespace object.
 
