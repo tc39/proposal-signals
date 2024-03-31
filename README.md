@@ -1,6 +1,13 @@
-# 🚦Standard JavaScript Signals proposal🚦
+# 🚦 JavaScript Signals standard proposal🚦
+Stage 0
 
-This document outlines the goals of a standard JavaScript Signal proposal and a minimal API, with the intention of bringing Signals as a TC39 proposal in the future. The effort here is driven by authors and maintainers of related frameworks and libraries in JavaScript, with a focus on developing significant experience using shared JavaScript libraries to refine the proposal prior to standardization.
+Authors: Rob Eisenberg and Daniel Ehrenberg
+
+This document describes an early common direction for signals in JavaScript, similar to the Promises A+ effort which preceded the Promises standardized by TC39 in ES2015. Try it for yourself, using [a polyfill](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill).
+
+Similarly to Promises A+, this effort focuses on aligning the JavaScript ecosystem. If this alignment is successful, then a standard could emerge, based on that experience. Several framework authors are collaborating here on a common model which could back their reactivity core. The current draft is based on design input from the authors/maintainers of [Angular](https://angular.io/), [Bubble](https://bubble.io/), [Ember](https://emberjs.com/), [FAST](https://www.fast.design/), [MobX](https://mobx.js.org/), [Preact](https://preactjs.com/), [Qwik](https://qwik.dev/), [RxJS](https://rxjs.dev/), [Solid](https://www.solidjs.com/), [Starbeam](https://www.starbeamjs.com/), [Svelte](https://svelte.dev/), [Vue](https://vuejs.org/), Wiz, and more…
+
+Differently from Promises A+, we're not trying to solve for a common developer-facing surface API, but rather the precise core semantics of the underlying signal graph. This proposal does include a fully concrete API, but the API is not targeted to most application developers. Instead, the signal API here is a better fit for frameworks to build on top of, providing interoperability through common signal graph and auto-tracking mechanism.
 
 The plan for this proposal is to do significant early prototyping, including integration into several frameworks, before advancing beyond Stage 1. We are only interested in standardizing Signals if they are suitable for use in practice in multiple frameworks, and provide real benefits over framework-provided signals. We hope that significant early prototyping will give us this information. See "Status and development plan" below for more details.
 
@@ -85,14 +92,6 @@ Signals give us much more than what can be seen on the surface of the API though
 
 ## Motivation for standardizing Signals
 
-Given extensive experience with Signals as a broadly useful construct, we propose to add a built-in Signal construct to JavaScript.
-
-#### Batteries included
-
-In general, JavaScript has had a fairly minimal standard library, but a trend in TC39 has been to make JS more of a "batteries-included" language, with a high-quality, built-in set of functionality available. For example, Temporal is replacing moment.js, and a number of small features, e.g., `Array.prototype.flat` and `Object.group` are replacing many lodash use cases. Benefits include smaller bundle sizes, improved stability and quality, less to learn when joining a new project, and a generally common vocabulary across JS developers.
-
-Apart from making Signals available out-of-the-box with the generic benefits that brings, we see the following technical benefits:
-
 #### Interoperability
 
 Each Signal implementation has its own auto-tracking mechanism, to keep track of the sources encountered when evaluating a computed Signal. This makes it hard to share models, components, and libraries between different frameworks--they tend to come with a false coupling to their view engine (given that Signals are usually implemented as part of JS frameworks).
@@ -115,13 +114,19 @@ With existing JS-language Signal libraries, it can be difficult to trace things 
 
 Built-in Signals enable JS runtimes and DevTools to potentially have improved support for inspecting Signals, particularly for debugging or performance analysis, whether this is built into browsers or through a shared extension. Existing tools such as the element inspector, performance snapshot, and memory profilers could be updated to specifically highlight Signals in their presentation of information.
 
-#### HTML/DOM Integration
+#### Secondary benefits
+
+##### Benefits of a standard library 
+
+In general, JavaScript has had a fairly minimal standard library, but a trend in TC39 has been to make JS more of a "batteries-included" language, with a high-quality, built-in set of functionality available. For example, Temporal is replacing moment.js, and a number of small features, e.g., `Array.prototype.flat` and `Object.group` are replacing many lodash use cases. Benefits include smaller bundle sizes, improved stability and quality, less to learn when joining a new project, and a generally common vocabulary across JS developers.
+
+##### HTML/DOM Integration (a future possibility)
 
 Current work in W3C and by browser implementors is seeking to bring native templating to HTML. Additionally, the W3C Web Components CG is exploring the possibility of extending Web Components to offer a fully declarative HTML API. To accomplish both of these goals, eventually a reactive primitive will be needed by HTML. Additionally, many ergonomic improvements to the DOM through integration of Signals can be imagined and have been asked for by the community.
 
 > Note, this integration would be a separate effort to come later, not part of this proposal itself.
 
-#### Ecosystem information exchange (*not* a reason to ship)
+##### Ecosystem information exchange (*not* a reason to ship)
 
 Standardization efforts can sometimes be helpful just at the "community" level, even without changes in browsers. The Signals effort is bringing together many different framework authors for a deep discussion about the nature of reactivity, algorithms and interoperability. This has already been useful, and does not justify inclusion in JS engines and browsers; Signals should only be added to the JavaScript standard if there are significant benefits *beyond* the ecosystem information exchange enabled.
 
@@ -191,18 +196,14 @@ It turns out that existing Signal libraries are not all that different from each
 An initial idea of a Signal API is below. Note that this is just an early draft, and we anticipate changes over time. Let's start with the full `.d.ts` to get an idea of the overall shape, and then we'll discuss the details of what it all means.
 
 ```ts
-// A cell of data which may change over time
-// (State or Computed signal)
-interface Signal<T> {
-    // Get the value of the Signal
-    get(): T;
-}
-
 namespace Signal {
     // A read-write Signal
     class State<T> implements Signal<T> {
         // Create a state Signal starting with the value t
         constructor(t: T, options?: SignalOptions<T>);
+
+        // Get the value of the signal
+        get(): T;
 
         // Set the state Signal value to t
         set(t: T): void;
@@ -213,27 +214,36 @@ namespace Signal {
         // Create a Signal which evaluates to the value returned by the callback.
         // Callback is called with this signal as the this value.
         constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
+
+        // Get the value of the signal
+        get(): T;
     }
 
+    // This namespace includes "advanced" features that are better to
+    // leave for framework authors rather than application developers.
+    // Analogous to `crypto.subtle`
     namespace subtle {
         // Run a callback with all tracking disabled (even for nested computed).
         function untrack<T>(cb: () => T): T;
 
         // Returns ordered list of all signals which this one referenced
-        // during the last time it was evaluated
-        function introspectSources(s: Computed | Watcher): Signal[];
+        // during the last time it was evaluated.
+        // For a Watcher, lists the set of signals which it is watching.
+        function introspectSources(s: Computed | Watcher): (State | Computed)[];
 
-        // Returns the subset of signal sinks which recursively
-        // lead to an Effect which has not been disposed
-        // Note: Only watched Computed signals will be in this list.
-        function introspectSinks(s: Signal): (Computed | Watcher)[];
+        // Returns the Watchers that this signal is contained in, plus any
+        // Computed signals which read this signal last time they were evaluated,
+        // if that computed signal is (recursively) watched.
+        function introspectSinks(s: State | Computed): (Computed | Watcher)[];
 
-        // True iff introspectSinks() is non-empty
-        function isWatched(s: Signal): boolean;
+        // True if this signal is "live", in that it is watched by a Watcher,
+        // or it is read by a Computed signal which is (recursively) live.
+        function hasSinks(s: State | Computed): boolean;
 
-        // Key for subtle Signal options, see interpretation below.
-        var watched: Symbol;
-        var unwatched: Symbol;
+        // True if this element is "reactive", in that it depends
+        // on some other signal. A Computed where hasSources is false
+        // will always return the same constant.
+        function hasSources(s: Computed | Watcher): boolean;
 
         class Watcher {
             // When a (recursive) source of Watcher is written to, call this callback,
@@ -254,19 +264,23 @@ namespace Signal {
             // with a source which is dirty or pending and hasn't yet been re-evaluated
             getPending(): Signal[];
         }
+
+        // Hooks to observe being watched or no longer watched
+        var watched: Symbol;
+        var unwatched: Symbol;
     }
-}
 
-interface SignalOptions<T> {
-    // Custom comparison function between old and new value. Default: Object.is.
-    // The signal is passed in as the this value for context.
-    equals?: (this: Signal<T>, t: T, t2: T) => boolean;
+    interface Options<T> {
+        // Custom comparison function between old and new value. Default: Object.is.
+        // The signal is passed in as the this value for context.
+        equals?: (this: Signal<T>, t: T, t2: T) => boolean;
 
-    // Callback called when isWatched becomes true, if it was previously false
-    [Signal.subtle.watched]?: (this: Signal<T>) => void;
+        // Callback called when isWatched becomes true, if it was previously false
+        [Signal.subtle.watched]?: (this: Signal<T>) => void;
 
-    // Callback called whenever isWatched becomes false, if it was previously true
-    [Signal.subtle.unwatched]?: (this: Signal<T>) => void;
+        // Callback called whenever isWatched becomes false, if it was previously true
+        [Signal.subtle.unwatched]?: (this: Signal<T>) => void;
+    }
 }
 ```
 
@@ -339,6 +353,7 @@ export function effect(cb) {
     let destructor;
     let c = new Signal.Computed(() => destructor = cb());
     w.watch(c);
+    c.get();
     return () => { destructor?(); w.unwatch(c) };
 }
 ```
@@ -357,6 +372,7 @@ Both computed and state Signals are garbage-collected like any JS values. But ef
 
 `Signal.subtle.untrack` is an escape hatch allowing reading Signals *without* tracking those reads. This capability is unsafe because it allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
 
+<!--
 TOOD: Show example where it's a good idea to use untrack
 
 ### Using watched/unwatched
@@ -370,27 +386,29 @@ TODO: Show example of a computed signal which represents the result of a fetch d
 TODO: Show how serializing the signal graph works
 
 TODO: Show how you can "hydrate" a signal from state to computed later, using a few signals.
+-->
 
 ### Omitted for now
 
 These features may be added later, but they are not included in the current draft. Their omission is due to the lack of established consensus in the design space among frameworks, as well as the demonstrated ability to work around their absense with mechanisms on top of the Signals notion described in this document. However, unfortunately, the omission limits the potential of interoperability among frameworks. As prototypes of Signals as described in this document are produced, there will be an effort to reexamine whether these omissions were the appropriate decision.
 
-* Async: Signals are always synchronously available for evaluation, in this model. However, it is frequently useful to have certain asynchronous processes which lead to a signal being set, and to have an understanding of when a signal is still "loading". It can also be useful to have a computed signal based on an async function, and to start evaluation of the async dependencies eagerly (increasing parallelism) when the computed signal is read. [TODO: Link to the appropriate thing from Milo.]
-* Forking: For transitions between views, it is often useful to maintain a live state for both the "from" and "to" states. The "to" state renders in the background, until it is ready to swap over, while the "from" state remains interactive. Maintaining both states at the same time requires "forking" the state of the signal graph. Such a capability is easily provided in React due to non-mutated state, but somehow lives within the data structures in a Signal-driven system.
-* Relays: This name refers to the idea of having a graph-native representation of state signals driven by certain processes. For example, when converting an observable to a signal, one subscribes to the observable and writes to the state from it; the observable is only subscribed to if this state signal is used in an effect. This may be implemented via the primitives described here, but it would be more organized and facilitate improved scheduling if the dependencies involved were represented in the signal graph directly, via a compound mechanism for this purpose. [TODO: Link to the appropriate thing from pzuraq.]
+* **Async**: Signals are always synchronously available for evaluation, in this model. However, it is frequently useful to have certain asynchronous processes which lead to a signal being set, and to have an understanding of when a signal is still "loading". One simple way to model the loading state is with exceptions, and the exception-caching behavior of computed signals composes somewhat reasonably with this technique. Improved techniques are discussed in [Issue #30](https://github.com/proposal-signals/proposal-signals/issues/30).
+* **Transactions**: For transitions between views, it is often useful to maintain a live state for both the "from" and "to" states. The "to" state renders in the background, until it is ready to swap over (committing the transaction), while the "from" state remains interactive. Maintaining both states at the same time requires "forking" the state of the signal graph, and it may even be useful to support multiple pending transitions at once. Discussion in [Issue #73](https://github.com/proposal-signals/proposal-signals/issues/73).
 
 Some possible [convenience methods](https://github.com/proposal-signals/proposal-signals/issues/32) are also omitted. 
  
 ## Status and development plan
 
-This proposal has not yet been presented at TC39, but the intention is to bring it to the committee as soon as it's in a good shape. In other words, it's at Stage 0.
+This proposal is on the April 2024 TC39 agenda for Stage 1. It can currently be thought of as "Stage 0".
 
-Currently, there is a small [example implementation of Signals](https://github.com/EisenbergEffect/proposal-signals/blob/main/examples/example-a/src/signals.ts) that also shows using them in a very small demo. The immediate next steps will be to add tests and larger sample usages, including integration into frameworks, while increasing the quality of the sample implementation.
+[A polyfill](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill) for this proposal is available, with some basic tests. Some framework authors have begun experimenting with substituting this signal implementation, but this usage is at an early stage.
 
-The collaborators on the Signal proposal want to be especially conservative in how we push this proposal forward, so that we don't land in the trap of getting something shipped which we end up regretting and not actually using. Our plan is to do the following extra tasks, not required by the TC39 process, to make sure that this proposal is on track:
-- Before proposing for Stage 1: A concrete API is sketched out, and implemented in JS, with experiments showing that it can integrate reasonably well into some JS frameworks. Some medium-sized worked examples using the API directly are prepared.
-- Before proposing for Stage 2: The proposed Signal API has been integrated into a large number of JS frameworks that we consider somewhat representative, and some large applications work with this basis. The collaborators have a solid grasp on the space of possible extensions to the API, and have concluded which (if any) should be added into this proposal. A polyfill implementation exists which is solid, well-tested (in a shared test format), and competitive in terms of performance (as verified with a thorough signal/framework benchmark set).
-- Before proposing for Stage 3: There is an optimized native JS engine implementation of the Signal API, allowing investigation of performance and memory management properties.
+The collaborators on the Signal proposal want to be especially **conservative** in how we push this proposal forward, so that we don't land in the trap of getting something shipped which we end up regretting and not actually using. Our plan is to do the following extra tasks, not required by the TC39 process, to make sure that this proposal is on track:
+
+Before proposing for Stage 2, we plan to:
+- Develop multiple production-grade polyfill implementations which are solid, well-tested (e.g., passing tests from various frameworks as well as test262-style tests), and competitive in terms of performance (as verified with a thorough signal/framework benchmark set).
+- Integrate the proposed Signal API into a large number of JS frameworks that we consider somewhat representative, and some large applications work with this basis. Test that it works efficiently and correctly in these contexts.
+- Have a solid understanding on the space of possible extensions to the API, and have concluded which (if any) should be added into this proposal.
 
 ## Signal algorithms
 
@@ -552,9 +570,6 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 1. Return `~dirty~`
 
 ## FAQ
-**Q**: Is it a good idea to enable application state which is distributed, rather than at the component level or at the top level of the application?
-
-**A**: This flexibility is what allows Signals to be used to implement complex reactive data structures and models which can be composed--quite useful things when sharing logic in UI development. At the same time, we expect that storing state at either the component or application level will be quite a common pattern with Signals, as it is without.
 
 **Q**: Isn't it a little soon to be standardizing something related to Signals, when they just started to be the hot new thing in 2022? Shouldn't we give them more time to evolve and stabilize?
 
@@ -564,11 +579,11 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: Can built-in Signals even be used by frameworks, given their tight integration with rendering and ownership?
 
-**A**: The parts which are more framework-specific tend to be in the area of effects, scheduling, and ownership/disposal, which this proposal does not attempt to solve. For performance reasons, some frameworks may need some of the extension APIs to integrate well, and this is something we are investigating. Our first priority with prototyping standards-track Signals is to validate that they can sit "underneath" existing frameworks compatibly and with good performance.
+**A**: The parts which are more framework-specific tend to be in the area of effects, scheduling, and ownership/disposal, which this proposal does not attempt to solve. Our first priority with prototyping standards-track Signals is to validate that they can sit "underneath" existing frameworks compatibly and with good performance.
 
 **Q**: Is the Signal API meant to be used directly by application developers, or wrapped by frameworks?
 
-**A**: The design is intended to fit either. The core functionality (state and computed constructors, reading and writing Signals) is designed to be similar to existing popular Signal implementations. On the other hand, features like `untrack` and Watchers are more error-prone and should probably be left to libraries and frameworks. Frameworks provide many other important features, such as managing ownership and disposal, and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems. Some frameworks may put a different skin around `Signal.State` and `Signal.Computed` for ergonomic reasons.
+**A**: While this API could be used directly by application developers (at least the part which is not within the `Signal.subtle` namespace), it is not designed to be especially ergonomic. Instead, the needs of library/framework authors are priorities. Most frameworks are expected to wrap even the basic `Signal.State` and `Signal.Computed` APIs with something expressing their ergonomic slant. In practice, it's typically best to use Signals via a framework, which manages trickier features (e.g., Watcher, `untrack`), as well as managing ownership and disposal (e.g., figuring out when signals should be added to and removed from watchers), and scheduling rendering to DOM--this proposal doesn't attempt to solve those problems.
 
 **Q**: Do I have to tear down Signals related to a widget when that widget is destroyed? What is the API for that?
 
@@ -586,15 +601,19 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **A**: Yes. Qwik uses Signals to good effect with both of these properties, and other frameworks have other well-developed approaches to hydration with Signals with different tradeoffs. One possible extension of Signals to support SSR and resumability adds introspection and incremental construction of the Signal graph; we'll be researching whether this capability is necessary to include in the proposal to make SSR work in practice.
 
-**Q**: Do Signals work with one-way data flow like React does? Can they be integrated with state management systems like Redux?
+**Q**: Do Signals work with one-way data flow like React does?
 
-**A**: Yes and yes. A graph of state and computed Signals is acyclic by construction (though it is still possible to schedule effects to write to state, in a similar anti-pattern to writing to state from `useEffect` in React). Redux in particular has already been integrated into Signal-based frameworks, e.g., (link to some Redux/Solid integration that probably exists)
+**A**: Yes, Signals are a mechanism for one-way dataflow. Signal-based UI frameworks let you express your view as a function of the model (where the model incorporates Signals). A graph of state and computed Signals is acyclic by construction. It is also possible to recreate React antipatterns within Signals (!), e.g., the Signal equivalent of a `setState` inside of `useEffect` is to use a Watcher to schedule a write to a State signal.
+
+**Q**: How do signals relate to state management systems like Redux? Do signals encourage unstructured state?
+
+**A**: Signals can form an efficient basis for store-like state management abstractions. A common pattern found in multiple frameworks is an object based on a Proxy which internally represents properties using Signals, e.g., [Vue `reactive()`](https://vuejs.org/api/reactivity-core.html#reactive), or [Solid stores](https://docs.solidjs.com/concepts/stores). These systems enable flexible grouping of state at the right level of abstraction for the particular application.
 
 #### How do Signals work?
 
 **Q**: Are Signals push-based or pull-based?
 
-**A**: Evaluation of computed Signals is pull-based: computed Signals are only evaluated when they are read, even if the underlying state changed. At the same time, changing state eagerly pushes cache invalidation to computed Signals which depend on it, potentially triggering a Watcher's `notify` callback. So Signals may be thought of as a "push-pull" construction.
+**A**: Evaluation of computed Signals is pull-based: computed Signals are only evaluated when `.get()` is called, even if the underlying state changed much earlier. At the same time, changing a State signal may immediately trigger a Watcher's callback, "pushing" the notification. So Signals may be thought of as a "push-pull" construction.
 
 **Q**: Do Signals introduce nondeterminism into JavaScript execution?
 
@@ -628,11 +647,11 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: Why are subscriptions automatic rather than providing a manual interface?
 
-**A**: Experience has shown that manual subscription interfaces for reactivity are un-ergonomic and error-prone. Automatic tracking is a core feature of Signals.
+**A**: Experience has shown that manual subscription interfaces for reactivity are un-ergonomic and error-prone. Automatic tracking is more composable and is a core feature of Signals.
 
-**Q**: Why does the `notify` callback run synchronously, rather than scheduled in a microtask?
+**Q**: Why does the `Watcher`'s callback run synchronously, rather than scheduled in a microtask?
 
-**A**: Because `notify` cannot read or write Signals, there is no unsoundness brought on by calling it synchronously. A typical `notify` callback will add a Signal to an Array to be read later, or mark a bit somewhere. It is unnecessary and impractically expensive to make a separate microtask for all of these sorts of actions.
+**A**: Because the callback cannot read or write Signals, there is no unsoundness brought on by calling it synchronously. A typical callback will add a Signal to an Array to be read later, or mark a bit somewhere. It is unnecessary and impractically expensive to make a separate microtask for all of these sorts of actions.
 
 **Q**: This API is missing some nice things that my favorite framework provides, which makes it easier to program with Signals. Can that be added to the standard too?
 
@@ -654,7 +673,7 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: How long is it going to take until I can use standard Signals?
 
-**A**: A polyfill should be available within weeks, but is initially not expected to be stable, as this API evolves during its review process. In some months or a year, a high-quality, high-performance stable polyfill should be usable, but this will still be subject to committee revisions and not yet standard. Following the typical trajectory of a TC39 proposal, it is expected to take at least 2-3 years at an absolute minimum for Signals to be natively available across all browsers going back a few versions, such that polyfills are not needed.
+**A**: A polyfill is already available, but it's best to not rely on its stability, as this API evolves during its review process. In some months or a year, a high-quality, high-performance stable polyfill should be usable, but this will still be subject to committee revisions and not yet standard. Following the typical trajectory of a TC39 proposal, it is expected to take at least 2-3 years at an absolute minimum for Signals to be natively available across all browsers going back a few versions, such that polyfills are not needed.
 
 **Q**: How will we prevent standardizing the wrong kind of Signals too soon, just like {{JS/web feature that you don't like}}?
 

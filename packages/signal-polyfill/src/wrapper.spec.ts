@@ -101,7 +101,7 @@ describe("Watcher", () => {
     expect(Signal.subtle.introspectSinks(computedSignal)).toHaveLength(0);
     expect(Signal.subtle.introspectSinks(stateSignal)).toHaveLength(0);
 
-    expect(Signal.subtle.isWatched(stateSignal)).toEqual(false);
+    expect(Signal.subtle.hasSinks(stateSignal)).toEqual(false);
 
     const destructor = effect(() => {
       output = stateSignal.get();
@@ -111,7 +111,7 @@ describe("Watcher", () => {
     });
 
     // The signal is now watched
-    expect(Signal.subtle.isWatched(stateSignal)).toEqual(true);
+    expect(Signal.subtle.hasSinks(stateSignal)).toEqual(true);
 
     // Now that the effect is created, there will be a source
     expect(Signal.subtle.introspectSources(watcher)).toHaveLength(1);
@@ -171,7 +171,7 @@ describe("Watcher", () => {
     // Since now it is un-subscribed, it should now be called
     expect(unwatchedSpy).toHaveBeenCalled();
     // We can confirm that it is un-watched by checking it
-    expect(Signal.subtle.isWatched(stateSignal)).toEqual(false);
+    expect(Signal.subtle.hasSinks(stateSignal)).toEqual(false);
 
     // Since now it is un-subscribed, this should have no effect now
     stateSignal.set(200);
@@ -754,8 +754,8 @@ describe("watch and unwatch", () => {
 
     w.watch(c);
     expect(w1 + w2 + u1 + u2 + n + d).toBe(0);
-    expect(Signal.subtle.isWatched(s1)).toBe(false);
-    expect(Signal.subtle.isWatched(s2)).toBe(false);
+    expect(Signal.subtle.hasSinks(s1)).toBe(false);
+    expect(Signal.subtle.hasSinks(s2)).toBe(false);
     expect(w.getPending()).toStrictEqual([c]);
 
     expect(c.get()).toBe(1);
@@ -764,8 +764,8 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(0);
     expect(u2).toBe(0);
     expect(n).toBe(0);
-    expect(Signal.subtle.isWatched(s1)).toBe(true);
-    expect(Signal.subtle.isWatched(s2)).toBe(false);
+    expect(Signal.subtle.hasSinks(s1)).toBe(true);
+    expect(Signal.subtle.hasSinks(s2)).toBe(false);
     expect(w.getPending()).toStrictEqual([]);
     expect(d).toBe(1);
 
@@ -775,8 +775,8 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(0);
     expect(u2).toBe(0);
     expect(n).toBe(1);
-    expect(Signal.subtle.isWatched(s1)).toBe(true);
-    expect(Signal.subtle.isWatched(s2)).toBe(false);
+    expect(Signal.subtle.hasSinks(s1)).toBe(true);
+    expect(Signal.subtle.hasSinks(s2)).toBe(false);
     expect(w.getPending()).toStrictEqual([c]);
     expect(d).toBe(1);
 
@@ -786,8 +786,8 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(0);
     expect(u2).toBe(0);
     expect(n).toBe(1);
-    expect(Signal.subtle.isWatched(s1)).toBe(true);
-    expect(Signal.subtle.isWatched(s2)).toBe(false);
+    expect(Signal.subtle.hasSinks(s1)).toBe(true);
+    expect(Signal.subtle.hasSinks(s2)).toBe(false);
     expect(w.getPending()).toStrictEqual([]);
     expect(d).toBe(2);
 
@@ -799,8 +799,8 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(0);
     expect(u2).toBe(0);
     expect(n).toBe(2);
-    expect(Signal.subtle.isWatched(s1)).toBe(true);
-    expect(Signal.subtle.isWatched(s2)).toBe(false);
+    expect(Signal.subtle.hasSinks(s1)).toBe(true);
+    expect(Signal.subtle.hasSinks(s2)).toBe(false);
     expect(w.getPending()).toStrictEqual([c]);
     expect(d).toBe(2);
 
@@ -810,8 +810,8 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(1);
     expect(u2).toBe(0);
     expect(n).toBe(2);
-    expect(Signal.subtle.isWatched(s1)).toBe(false);
-    expect(Signal.subtle.isWatched(s2)).toBe(true);
+    expect(Signal.subtle.hasSinks(s1)).toBe(false);
+    expect(Signal.subtle.hasSinks(s2)).toBe(true);
     expect(w.getPending()).toStrictEqual([]);
     expect(d).toBe(3);
 
@@ -828,8 +828,8 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(1);
     expect(u2).toBe(0);
     expect(n).toBe(2);
-    expect(Signal.subtle.isWatched(s1)).toBe(false);
-    expect(Signal.subtle.isWatched(s2)).toBe(true);
+    expect(Signal.subtle.hasSinks(s1)).toBe(false);
+    expect(Signal.subtle.hasSinks(s2)).toBe(true);
     expect(w.getPending()).toStrictEqual([]);
     expect(d).toBe(3);
 
@@ -840,8 +840,8 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(1);
     expect(u2).toBe(0);
     expect(n).toBe(3);
-    expect(Signal.subtle.isWatched(s1)).toBe(false);
-    expect(Signal.subtle.isWatched(s2)).toBe(true);
+    expect(Signal.subtle.hasSinks(s1)).toBe(false);
+    expect(Signal.subtle.hasSinks(s2)).toBe(true);
     expect(w.getPending()).toStrictEqual([c]);
     expect(d).toBe(3);
 
@@ -851,36 +851,14 @@ describe("watch and unwatch", () => {
     expect(w2).toBe(1);
     expect(u2).toBe(1);
     expect(n).toBe(3);
-    expect(Signal.subtle.isWatched(s1)).toBe(false);
-    expect(Signal.subtle.isWatched(s2)).toBe(false);
+    expect(Signal.subtle.hasSinks(s1)).toBe(false);
+    expect(Signal.subtle.hasSinks(s2)).toBe(false);
     expect(w.getPending()).toStrictEqual([]);
     expect(d).toBe(4);
   });
 });
 
 describe("type checks", () => {
-  it("runs explicit checks", () => {
-    let x = {};
-    let s = new Signal.State(1);
-    let c = new Signal.Computed(() => {});
-    let w = new Signal.subtle.Watcher(() => {});
-
-    expect(Signal.State.isState(x)).toBe(false);
-    expect(Signal.State.isState(s)).toBe(true);
-    expect(Signal.State.isState(c)).toBe(false);
-    expect(Signal.State.isState(w)).toBe(false);
-
-    expect(Signal.Computed.isComputed(x)).toBe(false);
-    expect(Signal.Computed.isComputed(s)).toBe(false);
-    expect(Signal.Computed.isComputed(c)).toBe(true);
-    expect(Signal.Computed.isComputed(w)).toBe(false);
-
-    expect(Signal.subtle.Watcher.isWatcher(x)).toBe(false);
-    expect(Signal.subtle.Watcher.isWatcher(s)).toBe(false);
-    expect(Signal.subtle.Watcher.isWatcher(c)).toBe(false);
-    expect(Signal.subtle.Watcher.isWatcher(w)).toBe(true);
-  });
-
   it("checks types in methods", () => {
     let x = {};
     let s = new Signal.State(1);
@@ -951,11 +929,11 @@ describe("type checks", () => {
     expect(Signal.subtle.introspectSources(w)).toStrictEqual([]);
 
     // @ts-expect-error
-    expect(() => Signal.subtle.isWatched(x)).toThrowError(TypeError);
-    expect(Signal.subtle.isWatched(s)).toBe(false);
-    expect(Signal.subtle.isWatched(c)).toBe(false);
+    expect(() => Signal.subtle.hasSinks(x)).toThrowError(TypeError);
+    expect(Signal.subtle.hasSinks(s)).toBe(false);
+    expect(Signal.subtle.hasSinks(c)).toBe(false);
     // @ts-expect-error
-    expect(() => Signal.subtle.isWatched(w)).toThrowError(TypeError);
+    expect(() => Signal.subtle.hasSinks(w)).toThrowError(TypeError);
 
     // @ts-expect-error
     expect(() => Signal.subtle.introspectSinks(x)).toThrowError(TypeError);
