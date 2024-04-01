@@ -9,10 +9,10 @@
     "build": "npm run build-loose -- --strict",
     "build-loose": "ecmarkup --load-biblio @tc39/ecma262-biblio --verbose spec.emu build/index.html --lint-spec"
   },
-  "homepage": "https://github.com/EisenbergEffect/proposal-signals#readme",
+  "homepage": "https://github.com/proposal-signals/proposal-signals#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/EisenbergEffect/proposal-signals.git"
+    "url": "git+https://github.com/proposal-signals/proposal-signals.git"
   },
   "license": "MIT",
   "devDependencies": {
