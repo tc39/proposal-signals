@@ -1,26 +1,28 @@
 {
-  "private": true,
   "name": "proposal-signals",
+  "private": true,
   "description": "A repository for the ECMAScript Signal proposal.",
-  "scripts": {
-    "example:a": "cd examples/example-a && vite --host",
-    "start": "npm run build-loose -- --watch",
-    "test": "vitest",
-    "build": "npm run build-loose -- --strict",
-    "build-loose": "ecmarkup --load-biblio @tc39/ecma262-biblio --verbose spec.emu build/index.html --lint-spec"
-  },
   "homepage": "https://github.com/proposal-signals/proposal-signals#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/proposal-signals/proposal-signals.git"
   },
   "license": "MIT",
+  "scripts": {
+    "build": "npm run build-loose -- --strict",
+    "build-loose": "ecmarkup --load-biblio @tc39/ecma262-biblio --verbose spec.emu build/index.html --lint-spec",
+    "example:a": "cd examples/example-a && vite --host",
+    "start": "npm run build-loose -- --watch",
+    "test": "vitest"
+  },
   "devDependencies": {
     "@tc39/ecma262-biblio": "2.1.2616",
     "ecmarkup": "^17.1.1",
+    "release-plan": "^0.8.0",
     "vite": "^4.4.11",
     "vitest": "^0.34.6"
   },
+  "packageManager": "pnpm@8.15.5",
   "engines": {
     "node": ">= 12"
   }
