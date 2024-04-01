@@ -434,6 +434,22 @@ describe("Errors", () => {
     s.set("second");
     expect(n).toBe(2);
   });
+  it("are cached by computed signals when equals throws", () => {
+    const s = new Signal.State(0);
+    const cSpy = vi.fn(() => s.get());
+    const c = new Signal.Computed(cSpy, {
+      equals() { throw new Error("equals"); },
+    });
+
+    c.get();
+    s.set(1);
+
+    // Error is cached; c throws again without needing to rerun.
+    expect(() => c.get()).toThrowError("equals");
+    expect(cSpy).toBeCalledTimes(2);
+    expect(() => c.get()).toThrowError("equals");
+    expect(cSpy).toBeCalledTimes(2);
+  })
 });
 
 describe("Cycles", () => {
@@ -612,6 +628,48 @@ describe("Custom equality", () => {
     expect(s.get()).toBe(2);
     expect(c.get()).toBe(2);
     expect(n).toBe(3);
+  });
+  it("does not leak tracking information", () => {
+    const exact = new Signal.State(1);
+    const epsilon = new Signal.State(0.1);
+    const counter = new Signal.State(1);
+
+    const cutoff = vi.fn((a, b) => Math.abs(a - b) < epsilon.get());
+    const innerFn = vi.fn(() => exact.get());
+    const inner = new Signal.Computed(innerFn, {
+      equals: cutoff
+    });
+
+    const outerFn = vi.fn(() => {
+      counter.get();
+      return inner.get();
+    });
+    const outer = new Signal.Computed(outerFn);
+
+    outer.get();
+
+    // Everything runs the first time.
+    expect(innerFn).toBeCalledTimes(1);
+    expect(outerFn).toBeCalledTimes(1);
+
+    exact.set(2);
+    counter.set(2);
+    outer.get()
+
+    // `outer` reruns because `counter` changed, `inner` reruns when called by
+    // `outer`, and `cutoff` is called for the first time.
+    expect(innerFn).toBeCalledTimes(2);
+    expect(outerFn).toBeCalledTimes(2);
+    expect(cutoff).toBeCalledTimes(1);
+
+    epsilon.set(0.2);
+    outer.get();
+
+    // Changing something `cutoff` depends on makes `inner` need to rerun, but
+    // (since the new and old values are equal) not `outer`.
+    expect(innerFn).toBeCalledTimes(3);
+    expect(outerFn).toBeCalledTimes(2);
+    expect(cutoff).toBeCalledTimes(2);
   });
 });
 
