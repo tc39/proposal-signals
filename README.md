@@ -124,7 +124,10 @@ In general, JavaScript has had a fairly minimal standard library, but a trend in
 
 ##### HTML/DOM Integration (a future possibility)
 
-Current work in W3C and by browser implementors is seeking to bring native templating to HTML. Additionally, the W3C Web Components CG is exploring the possibility of extending Web Components to offer a fully declarative HTML API. To accomplish both of these goals, eventually a reactive primitive will be needed by HTML. Additionally, many ergonomic improvements to the DOM through integration of Signals can be imagined and have been asked for by the community.
+Current work in W3C and by browser implementors is seeking to bring native templating to HTML ([DOM Parts][wicg-pr-1023] and [Template Instantiation][wicg-propsal-template-instantiation]). Additionally, the W3C Web Components CG is exploring the possibility of extending Web Components to offer a fully declarative HTML API. To accomplish both of these goals, eventually a reactive primitive will be needed by HTML. Additionally, many ergonomic improvements to the DOM through integration of Signals can be imagined and have been asked for by the community.
+
+[wicg-pr-1023]: https://github.com/WICG/webcomponents/pull/1023
+[wicg-propsal-template-instantiation]: https://github.com/WICG/webcomponents/blob/gh-pages/proposals/Template-Instantiation.md
 
 > Note, this integration would be a separate effort to come later, not part of this proposal itself.
 
