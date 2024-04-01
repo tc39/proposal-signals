@@ -612,6 +612,10 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **A**: Signals can form an efficient basis for store-like state management abstractions. A common pattern found in multiple frameworks is an object based on a Proxy which internally represents properties using Signals, e.g., [Vue `reactive()`](https://vuejs.org/api/reactivity-core.html#reactive), or [Solid stores](https://docs.solidjs.com/concepts/stores). These systems enable flexible grouping of state at the right level of abstraction for the particular application.
 
+**Q**: What are Signals offering that `Proxy` doesn't currently handle?
+
+**A**: Proxies must wrap some object. Proxies, by themselves, are not all that useful, but can't be used to create reactive-versions of Map, Set, Object, Array, etc. See Prior Implementations [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private).
+
 #### How do Signals work?
 
 **Q**: Are Signals push-based or pull-based?
