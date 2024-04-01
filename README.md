@@ -19,6 +19,12 @@ To develop a complicated user interface (UI), JavaScript application developers 
 
 Signal-like constructs have independently been found to be useful in non-UI contexts as well, particularly in build systems to avoid unnecessary rebuilds.
 
+Signals are used in reactive programming to remove the need to manage updating in applications.
+
+> A declarative programming model for updating based on changes to state. 
+
+from _[What is Reactivity?](https://www.pzuraq.com/blog/what-is-reactivity)_.
+
 #### Example - A VanillaJS Counter
 
 Given a variable, `counter`, you want to render into the DOM whether the counter is even or odd. Whenever the `counter` changes, you want to update the DOM with the latest parity. In Vanilla JS, you might have something like this:
