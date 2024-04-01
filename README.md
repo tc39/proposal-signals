@@ -207,14 +207,16 @@ It turns out that existing Signal libraries are not all that different from each
 An initial idea of a Signal API is below. Note that this is just an early draft, and we anticipate changes over time. Let's start with the full `.d.ts` to get an idea of the overall shape, and then we'll discuss the details of what it all means.
 
 ```ts
+interface Signal<T> {
+  // Get the value of the signal
+  get(): T;
+}
+
 namespace Signal {
     // A read-write Signal
     class State<T> implements Signal<T> {
         // Create a state Signal starting with the value t
         constructor(t: T, options?: SignalOptions<T>);
-
-        // Get the value of the signal
-        get(): T;
 
         // Set the state Signal value to t
         set(t: T): void;
@@ -225,16 +227,13 @@ namespace Signal {
         // Create a Signal which evaluates to the value returned by the callback.
         // Callback is called with this signal as the this value.
         constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
-
-        // Get the value of the signal
-        get(): T;
     }
 
     // This namespace includes "advanced" features that are better to
     // leave for framework authors rather than application developers.
     // Analogous to `crypto.subtle`
     namespace subtle {
-        // Run a callback with all tracking disabled (even for nested computed).
+        // Run a callback with all tracking disabled
         function untrack<T>(cb: () => T): T;
 
         // Get the current computed signal which is tracking any signal reads, if any
