@@ -1,5 +1,7 @@
 # Signal Polyfill
 
+## ⚠️  This polyfill is a preview of an in-progress proposal and could change at any time. Do not use this in production. ⚠️
+
 A "signal" is [a proposed first-class JavaScript data type](../../README.md) that enables one-way data flow through cells of state or computations derived from other state/computations.
 
 This is a polyfill for the `Signal` API.
