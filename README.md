@@ -622,12 +622,7 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: What are Signals offering that `Proxy` doesn't currently handle?
 
-**A**: Proxies must wrap some object. They cannot be used to intercept property access/assignment to primitive values such as numbers, strings, or symbols.
-See Prior Implementations [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private), [discussion](https://github.com/proposal-signals/proposal-signals/issues/101#issuecomment-2029802574). The following is valid for a Signal, but not for a Proxy:
-```js
-new Proxy(0, { ... }) // TypeError: Cannot create proxy with a non-object as target or handler
-new Signal.State(0); // Perfectly valid
-```
+**A**: Proxies must wrap some object. Proxies, by themselves, are not all that useful, but can't be used to create reactive-versions of Map, Set, Object, Array, etc. See Prior Implementations [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private).
 
 #### How do Signals work?
 
