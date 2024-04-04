@@ -186,7 +186,7 @@ It turns out that existing Signal libraries are not all that different from each
         * However, it is important to not literally shadow the exact same names!
     * Tension between "usability by JS devs" and "providing all the hooks to frameworks"
         * Idea: Provide all the hooks, but include errors when misused if possible.
-        * Idea: Put subtle APIs in a `subtle` namespace, similar to [`crypto.subtle`](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/subtle), to mark the line between APIs which are necessary for more advanced usage like implementing a framework or building dev tools versus more surface usage like instantiating signals for use with a framework.
+        * Idea: Put subtle APIs in a `subtle` namespace, similar to [`crypto.subtle`](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/subtle), to mark the line between APIs which are necessary for more advanced usage like implementing a framework or building dev tools versus more everyday application development usage like instantiating signals for use with a framework.
 * Be implementable and usable with good performance -- the surface API doesn't cause too much overhead
     * Enable subclassing, so that frameworks can add their own methods and fields, including private fields. This is important to avoid the need for additional allocations at the framework level. See "Memory management" below.
 
