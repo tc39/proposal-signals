@@ -622,12 +622,29 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: What are Signals offering that `Proxy` doesn't currently handle?
 
-**A**: Proxies must wrap some object. They cannot be used to intercept property access/assignment to primitive values such as numbers, strings, or symbols.
-See Prior Implementations [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private), [discussion](https://github.com/proposal-signals/proposal-signals/issues/101#issuecomment-2029802574). The following is valid for a Signal, but not for a Proxy:
+**A**: Proxies must wrap some object and do not inherently participate in a reactive graph. the reactive graph is built by objects that know about and discover other reactive data during the calculation of a value. Probies also have a usage limitation: they cannot be used to intercept property access/assignment to primitive values such as numbers, strings, or symbols.
+See example prior implementations for the relationship between reactive data atd proxies: [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private), [discussion](https://github.com/proposal-signals/proposal-signals/issues/101#issuecomment-2029802574). The following is valid for a Signal, but not for a Proxy:
 ```js
 new Proxy(0, { ... }) // TypeError: Cannot create proxy with a non-object as target or handler
 new Signal.State(0); // Perfectly valid
 ```
+in a reactive ui use case, the signal change will show up to the user, but the proxy change will not:
+```js
+const a = { count: 0 };
+const b = new Proxy(a, {});
+const c = new Signal.State(0);
+
+<template>
+  {b.count}
+  {c.get()}
+
+  <button onclick={() => {
+    b.count++;
+    c.set(c.get() + 1);
+  }}>change</button>
+</template>
+```
+when using a renderer that is optimized for fine-grained reactivity, clicking the button will cause the `c.get` cell to be updated, but `b.count` will forever remain 0, because b is not reactive.
 
 #### How do Signals work?
 
