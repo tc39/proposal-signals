@@ -8,6 +8,11 @@
     "EisenbergEffect"
   ],
   "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/proposal-signals/proposal-signals.git",
+    "directory": "packages/signal-polyfill"
+  },
   "type": "module",
   "types": "dist/index.d.ts",
   "scripts": {
