@@ -622,12 +622,39 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: What are Signals offering that `Proxy` doesn't currently handle?
 
-**A**: Proxies must wrap some object. They cannot be used to intercept property access/assignment to primitive values such as numbers, strings, or symbols.
-See Prior Implementations [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private), [discussion](https://github.com/proposal-signals/proposal-signals/issues/101#issuecomment-2029802574). The following is valid for a Signal, but not for a Proxy:
+**A**: Proxies and Signals are complementary and go well together. Proxies let you intercept shallow object operations and signals coordinate a dependency graph (of cells). Backing a Proxy with Signals is a great way to make a nested reactive structure with great ergonomics.
+
+In this example, we can use a proxy to make the signal have a getter and setter property instead of using the `get` and `set` methods:
 ```js
-new Proxy(0, { ... }) // TypeError: Cannot create proxy with a non-object as target or handler
-new Signal.State(0); // Perfectly valid
+const a = new Signal.State(0);
+const b = new Proxy(a, {
+  get(target, property, receiver) {
+    if (property === 'value') {
+      return target.get():
+    }
+  }
+  set(target, property, value, receiver) {
+    if (property === 'value') {
+      target.set(value)!
+    }
+  }
+});
+
+// usage in a hypothetical reactive context:
+<template>
+  {b.value}
+
+  <button onclick={() => {
+    b.count++;
+  }}>change</button>
+</template>
 ```
+when using a renderer that is optimized for fine-grained reactivity, clicking the button will cause the `b.value` cell to be updated.
+
+See:
+- examples of nested reactive structures created with both Signals and Proxies: [signal-utils](https://github.com/NullVoxPopuli/signal-utils/tree/main/src)
+- example prior implementations showing the relationship between reactive data atd proxies: [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private)
+- [discussion](https://github.com/proposal-signals/proposal-signals/issues/101#issuecomment-2029802574).
 
 #### How do Signals work?
 
