@@ -622,36 +622,34 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: What are Signals offering that `Proxy` doesn't currently handle?
 
-**A**: Proxies must wrap some object and do not inherently participate in a reactive graph. 
-Signals are things that can be part of this graph, and are well-behaved as citizens of it.
-The reactive graph is built over time by the relationships between reactive data, resulting in what is called 'autotracking'.
+**A**: Proxies must wrap some object and do not inherently participate in a reactive graph. Proxies can be used to change the ergonomics of a reactive data structure.
 
-Proxies also have a usage limitation: they cannot be used to intercept property access/assignment to primitive values such as numbers, strings, or symbols.
- The following is valid for a Signal, but not for a Proxy:
+In this example, we can use a proxy to make the signal have a getter and setter property instead of using the `get` and `set` methods:
 ```js
-new Proxy(0, { ... }) // TypeError: Cannot create proxy with a non-object as target or handler
-new Signal.State(0); // Perfectly valid
-```
+const a = new Signal.State(0);
+const b = new Proxy(a, {
+  get(target, property, receiver) {
+    if (property === 'value') {
+      return target.get():
+    }
+  }
+  set(target, property, value, receiver) {
+    if (property === 'value') {
+      target.set(value)!
+    }
+  }
+});
 
-Reactive objects are completely inert on their own and become special when used in a reactive _context_ that lets them autotrack dependencies.
-
-In this example, a reactive ui use case, the signal change will show up to the user, but the proxy change will not:
-```js
-const a = { count: 0 };
-const b = new Proxy(a, {});
-const c = new Signal.State(0);
-
+// usage in a hypothetical reactive context:
 <template>
-  {b.count}
-  {c.get()}
+  {b.value}
 
   <button onclick={() => {
     b.count++;
-    c.set(c.get() + 1);
   }}>change</button>
 </template>
 ```
-when using a renderer that is optimized for fine-grained reactivity, clicking the button will cause the `c.get` cell to be updated, but `b.count` will forever remain 0, because `b` (and `b.count`) is not reactive.
+when using a renderer that is optimized for fine-grained reactivity, clicking the button will cause the `b.value` cell to be updated.
 
 See:
 - example prior implementations for the relationship between reactive data atd proxies: [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private)
