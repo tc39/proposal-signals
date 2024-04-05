@@ -622,7 +622,7 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: What are Signals offering that `Proxy` doesn't currently handle?
 
-**A**: Proxies must wrap some object and do not inherently participate in a reactive graph. Proxies can be used to change the ergonomics of a reactive data structure.
+**A**: Proxies and Signals are complementary and go well together. Proxies let you intercept shallow object operations and signals coordinate a dependency graph (of cells). Backing a Proxy with Signals is a great way to make a nested reactive structure with great ergonomics.
 
 In this example, we can use a proxy to make the signal have a getter and setter property instead of using the `get` and `set` methods:
 ```js
@@ -652,7 +652,8 @@ const b = new Proxy(a, {
 when using a renderer that is optimized for fine-grained reactivity, clicking the button will cause the `b.value` cell to be updated.
 
 See:
-- example prior implementations for the relationship between reactive data atd proxies: [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private)
+- examples of nested reactive structures created with both Signals and Proxies: [signal-utils](https://github.com/NullVoxPopuli/signal-utils/tree/main/src)
+- example prior implementations showing the relationship between reactive data atd proxies: [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private)
 - [discussion](https://github.com/proposal-signals/proposal-signals/issues/101#issuecomment-2029802574).
 
 #### How do Signals work?
