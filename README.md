@@ -384,7 +384,7 @@ Both computed and state Signals are garbage-collected like any JS values. But Wa
 `Signal.subtle.untrack` is an escape hatch allowing reading Signals *without* tracking those reads. This capability is unsafe because it allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
 
 <!--
-TOOD: Show example where it's a good idea to use untrack
+TODO: Show example where it's a good idea to use untrack
 
 ### Using watched/unwatched
 
