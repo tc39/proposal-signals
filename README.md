@@ -347,13 +347,13 @@ The `Watcher` interface defined above gives the basis for implementing typical J
 // NOTE: This scheduling logic is too basic to be useful. Do not copy/paste.
 let pending = false;
 
-let w = new Signal.subtle.Watcher(self => {
+let w = new Signal.subtle.Watcher(() => {
     if (!pending) {
         pending = true;
         queueMicrotask(() => {
             pending = false;
-            for (let s of self.getPending()) s.get();
-            self.watch();
+            for (let s of this.getPending()) s.get();
+            this.watch();
         });
     }
 });
