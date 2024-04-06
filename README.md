@@ -645,7 +645,7 @@ const b = new Proxy(a, {
   {b.value}
 
   <button onclick={() => {
-    b.count++;
+    b.value++;
   }}>change</button>
 </template>
 ```
