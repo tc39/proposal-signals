@@ -362,10 +362,10 @@ let w = new Signal.subtle.Watcher(() => {
 // itself on the microtask queue whenever one of its dependencies might change
 export function effect(cb) {
     let destructor;
-    let c = new Signal.Computed(() => { destructor.?(); destructor = cb(); });
+    let c = new Signal.Computed(() => { destructor?.(); destructor = cb(); });
     w.watch(c);
     c.get();
-    return () => { destructor.?(); w.unwatch(c) };
+    return () => { destructor?.(); w.unwatch(c) };
 }
 ```
 
