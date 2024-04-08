@@ -21,7 +21,7 @@ Signal-like constructs have independently been found to be useful in non-UI cont
 
 Signals are used in reactive programming to remove the need to manage updating in applications.
 
-> A declarative programming model for updating based on changes to state. 
+> A declarative programming model for updating based on changes to state.
 
 from _[What is Reactivity?](https://www.pzuraq.com/blog/what-is-reactivity)_.
 
@@ -124,7 +124,7 @@ Built-in Signals enable JS runtimes and DevTools to potentially have improved su
 
 #### Secondary benefits
 
-##### Benefits of a standard library 
+##### Benefits of a standard library
 
 In general, JavaScript has had a fairly minimal standard library, but a trend in TC39 has been to make JS more of a "batteries-included" language, with a high-quality, built-in set of functionality available. For example, Temporal is replacing moment.js, and a number of small features, e.g., `Array.prototype.flat` and `Object.groupBy` are replacing many lodash use cases. Benefits include smaller bundle sizes, improved stability and quality, less to learn when joining a new project, and a generally common vocabulary across JS developers.
 
@@ -150,7 +150,7 @@ It turns out that existing Signal libraries are not all that different from each
 * A Signal type which represents state, i.e. writable Signal. This is a value that others can read.
 * A computed/memo/derived Signal type, which depends on others and is lazily calculated and cached.
     * Computation is lazy, meaning computed Signals aren't calculated again by default when one of their dependencies changes, but rather only run if someone actually reads them.
-    * Computation is "glitch-free", meaning no unnecessary calculations are ever performed. This implies that, when an application reads a computed Signal, there is a topological sorting of the potentially dirty parts of the graph to run, to eliminate any duplicates.
+    * Computation is "[glitch](https://en.wikipedia.org/wiki/Reactive_programming#Glitches)-free", meaning no unnecessary calculations are ever performed. This implies that, when an application reads a computed Signal, there is a topological sorting of the potentially dirty parts of the graph to run, to eliminate any duplicates.
     * Computation is cached, meaning that if, after the last time a dependency changes, no dependencies have changed, then the computed Signal is *not* recalculated when accessed.
     * Custom comparisons are possible for computed Signals as well as state Signals, to note when further computed Signals which depend on them should be updated.
 * Reactions to the condition where a computed Signal has one of its dependencies (or nested dependencies) become "dirty" and change, meaning that the Signal's value might be outdated.
@@ -160,7 +160,7 @@ It turns out that existing Signal libraries are not all that different from each
 * Enable JS frameworks to do their own scheduling. No Promise-style built-in forced-on scheduling.
     * Synchronous reactions are needed to enable scheduling later work based on framework logic.
     * Writes are synchronous and immediately take effect (a framework which batches writes can do that on top).
-    * It is possible to separate checking whether an effect may be "dirty" from actually running the effect (enabling a two-stage effect scheduler). 
+    * It is possible to separate checking whether an effect may be "dirty" from actually running the effect (enabling a two-stage effect scheduler).
 * Ability to read Signals *without* triggering dependencies to be recorded (`untrack`)
 * Enable composition of different codebases which use Signals/reactivity, e.g.,
     * Using multiple frameworks together as far as tracking/reactivity itself goes (modulo omissions, see below)
@@ -169,12 +169,12 @@ It turns out that existing Signal libraries are not all that different from each
 ### Soundness
 
 * Discourage/prohibit naive misuse of synchronous reactions.
-    * Soundness risk: it may expose "glitches" if improperly used: If rendering is done immediately when a Signal is set, it may expose incomplete application state to the end user. Therefore, this feature should only be used to intelligently schedule work for later, once application logic is finished.
+    * Soundness risk: it may expose "[glitches](https://en.wikipedia.org/wiki/Reactive_programming#Glitches)" if improperly used: If rendering is done immediately when a Signal is set, it may expose incomplete application state to the end user. Therefore, this feature should only be used to intelligently schedule work for later, once application logic is finished.
     * Solution: Disallow reading and writing any Signal from within a synchronous reaction callback
 * Discourage `untrack` and mark its unsound nature
     * Soundness risk: allows the creation of computed Signals whose value depends on other Signals, but which aren't updated when those Signals change. It should be used when the untracked accesses will not change the result of the computation.
     * Solution: The API is marked "unsafe" in the name.
-* Note: This proposal does allow signals to be both read and written from computed and effect signals, without restricting writes that come after reads, despite the soundness risk. This decision was taken to preserve flexibility and compatibility in integration with frameworks. 
+* Note: This proposal does allow signals to be both read and written from computed and effect signals, without restricting writes that come after reads, despite the soundness risk. This decision was taken to preserve flexibility and compatibility in integration with frameworks.
 
 ### Surface API
 
@@ -221,7 +221,7 @@ namespace Signal {
         // Set the state Signal value to t
         set(t: T): void;
     }
-    
+
     // A Signal which is a formula based on other Signals
     class Computed<T> implements Signal<T> {
         // Create a Signal which evaluates to the value returned by the callback.
@@ -390,7 +390,7 @@ TODO: Show example where it's a good idea to use untrack
 
 TODO: Show example of converting an Observable to a computed signal, subscribed only when used by an effect
 
-TODO: Show example of a computed signal which represents the result of a fetch directed at a state, which is cancelled 
+TODO: Show example of a computed signal which represents the result of a fetch directed at a state, which is cancelled
 
 ### Introspection for SSR
 
@@ -406,8 +406,8 @@ These features may be added later, but they are not included in the current draf
 * **Async**: Signals are always synchronously available for evaluation, in this model. However, it is frequently useful to have certain asynchronous processes which lead to a signal being set, and to have an understanding of when a signal is still "loading". One simple way to model the loading state is with exceptions, and the exception-caching behavior of computed signals composes somewhat reasonably with this technique. Improved techniques are discussed in [Issue #30](https://github.com/proposal-signals/proposal-signals/issues/30).
 * **Transactions**: For transitions between views, it is often useful to maintain a live state for both the "from" and "to" states. The "to" state renders in the background, until it is ready to swap over (committing the transaction), while the "from" state remains interactive. Maintaining both states at the same time requires "forking" the state of the signal graph, and it may even be useful to support multiple pending transitions at once. Discussion in [Issue #73](https://github.com/proposal-signals/proposal-signals/issues/73).
 
-Some possible [convenience methods](https://github.com/proposal-signals/proposal-signals/issues/32) are also omitted. 
- 
+Some possible [convenience methods](https://github.com/proposal-signals/proposal-signals/issues/32) are also omitted.
+
 ## Status and development plan
 
 This proposal is on the April 2024 TC39 agenda for Stage 1. It can currently be thought of as "Stage 0".
@@ -430,7 +430,7 @@ Some aspects of the algorithm:
 - These four callbacks might all throw exceptions, and these exceptions are propagated in a predictable manner to the calling JS code. The exceptions do *not* halt execution of this algorithm or leave the graph in a half-processed state. For errors thrown in the `notify` callback of a Watcher, that exception is sent to the `.set()` call which triggered it, using an AggregateError if multiple exceptions were thrown. The others (including `watched`/`unwatched`?) are stored in the value of the Signal, to be rethrown when read, and such a rethrowing Signal can be marked `~clean~` just like any other with a normal value.
 - Care is taken to avoid circularities in cases of computed signals which are not "watched" (being observed by any Watcher), so that they can be garbage collected independently from other parts of the signal graph. Internally, this can be implemented with a system of generation numbers which are always collected; note that optimized implementations may also include local per-node generation numbers, or avoid tracking some numbers on watched signals.
 
-### Hidden global state 
+### Hidden global state
 
 Signal algorithms need to reference certain global state. This state is global for the entire thread, or "agent".
 
@@ -460,7 +460,7 @@ Signal algorithms need to reference certain global state. This state is global f
 1. Set this Signal's `equals` to options?.equals
 1. Set this Signal's `watched` to options?.[Signal.subtle.watched]
 1. Set this Signal's `unwatched` to options?.[Signal.subtle.watched]
-1. Set this Signal's `sinks` to the empty set 
+1. Set this Signal's `sinks` to the empty set
 1. Set `state` to `~clean~`.
 
 #### Method: `Signal.State.prototype.get()`
@@ -676,7 +676,7 @@ See:
 
 **Q**: What does it mean for Signals to enable "glitch-free" execution?
 
-**A**: Earlier push-based models for reactivity faced an issue of redundant computation: If an update to a state Signal causes the computed Signal to eagerly run, ultimately this may push an update to the UI. But this write to the UI may be premature, if there was going to be another change to the originating state Signal before the next frame. Sometimes, inaccurate intermediate values were even shown to end-users due to such glitches. Signals avoid this dynamic by being pull-based, rather than push-based: At the time the framework schedules the rendering of the UI, it will pull the appropriate updates, avoiding wasted work both in computation as well as in writing to the DOM.
+**A**: Earlier push-based models for reactivity faced an issue of redundant computation: If an update to a state Signal causes the computed Signal to eagerly run, ultimately this may push an update to the UI. But this write to the UI may be premature, if there was going to be another change to the originating state Signal before the next frame. Sometimes, inaccurate intermediate values were even shown to end-users due to such [glitches](https://en.wikipedia.org/wiki/Reactive_programming#Glitches). Signals avoid this dynamic by being pull-based, rather than push-based: At the time the framework schedules the rendering of the UI, it will pull the appropriate updates, avoiding wasted work both in computation as well as in writing to the DOM.
 
 **Q**: What does it mean for Signals to be "lossy"?
 
