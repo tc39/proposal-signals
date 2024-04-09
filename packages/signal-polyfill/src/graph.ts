@@ -174,7 +174,7 @@ export interface ReactiveNode {
    */
   producerMustRecompute(node: unknown): boolean;
   producerRecomputeValue(node: unknown): void;
-  consumerMarkedDirty(node: unknown): void;
+  consumerMarkedDirty(this: unknown): void;
 
   /**
    * Called when a signal is read within this consumer.
@@ -335,7 +335,7 @@ export function producerUpdatesAllowed(): boolean {
 export function consumerMarkDirty(node: ReactiveNode): void {
   node.dirty = true;
   producerNotifyConsumers(node);
-  node.consumerMarkedDirty?.(node);
+  node.consumerMarkedDirty?.call(node.wrapper ?? node);
 }
 
 /**
