@@ -1,1 +1,1 @@
-export { Signal } from "./wrapper.js";
+export { Signal } from './wrapper.js';
