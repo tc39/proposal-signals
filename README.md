@@ -208,8 +208,8 @@ An initial idea of a Signal API is below. Note that this is just an early draft,
 
 ```ts
 interface Signal<T> {
-  // Get the value of the signal
-  get(): T;
+    // Get the value of the signal
+    get(): T;
 }
 
 namespace Signal {
@@ -218,15 +218,21 @@ namespace Signal {
         // Create a state Signal starting with the value t
         constructor(t: T, options?: SignalOptions<T>);
 
+        // Get the value of the signal
+        get(): T;
+
         // Set the state Signal value to t
         set(t: T): void;
     }
 
     // A Signal which is a formula based on other Signals
-    class Computed<T> implements Signal<T> {
+    class Computed<T = unknown> implements Signal<T> {
         // Create a Signal which evaluates to the value returned by the callback.
         // Callback is called with this signal as the this value.
         constructor(cb: (this: Computed<T>) => T, options?: SignalOptions<T>);
+
+        // Get the value of the signal
+        get(): T;
     }
 
     // This namespace includes "advanced" features that are better to
@@ -283,7 +289,7 @@ namespace Signal {
         var unwatched: Symbol;
     }
 
-    interface Options<T> {
+    interface SignalOptions<T> {
         // Custom comparison function between old and new value. Default: Object.is.
         // The signal is passed in as the this value for context.
         equals?: (this: Signal<T>, t: T, t2: T) => boolean;
@@ -352,8 +358,8 @@ let w = new Signal.subtle.Watcher(() => {
         pending = true;
         queueMicrotask(() => {
             pending = false;
-            for (let s of this.getPending()) s.get();
-            this.watch();
+            for (let s of w.getPending()) s.get();
+            w.watch();
         });
     }
 });
