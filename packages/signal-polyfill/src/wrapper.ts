@@ -71,6 +71,10 @@ export class State<T> {
     }
   }
 
+  toJSON() {
+    return this.get();
+  }
+
   public get(): T {
     if (!isState(this))
       throw new TypeError(

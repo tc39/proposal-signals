@@ -27,6 +27,13 @@ describe("Signal.State", () => {
 
     expect(stateSignal.get()).toEqual(10);
   });
+
+  it("is works with JSON.stringify", () => {
+    const stateSignal = new Signal.State(10);
+
+    expect(JSON.stringify(stateSignal)).toEqual("10");
+
+  });
 });
 
 describe("Computed", () => {
@@ -107,7 +114,7 @@ describe("Watcher", () => {
       output = stateSignal.get();
       computedOutput = computedSignal.get();
       calls++;
-      return () => {};
+      return () => { };
     });
 
     // The signal is now watched
@@ -188,7 +195,7 @@ describe("Watcher", () => {
     // Adding any other effect after an unwatch should work as expected
     const destructor2 = effect(() => {
       output = stateSignal.get();
-      return () => {};
+      return () => { };
     });
 
     stateSignal.set(300);
@@ -336,8 +343,8 @@ describe("liveness", () => {
     expect(watchedSpy).not.toBeCalled();
     expect(unwatchedSpy).not.toBeCalled();
 
-    const w = new Signal.subtle.Watcher(() => {});
-    const w2 = new Signal.subtle.Watcher(() => {});
+    const w = new Signal.subtle.Watcher(() => { });
+    const w2 = new Signal.subtle.Watcher(() => { });
 
     w.watch(computed);
     expect(watchedSpy).toBeCalledTimes(1);
@@ -369,7 +376,7 @@ describe("liveness", () => {
     expect(watchedSpy).not.toBeCalled();
     expect(unwatchedSpy).not.toBeCalled();
 
-    const w = new Signal.subtle.Watcher(() => {});
+    const w = new Signal.subtle.Watcher(() => { });
     w.watch(c);
     expect(watchedSpy).toBeCalledTimes(1);
     expect(unwatchedSpy).not.toBeCalled();
@@ -419,7 +426,7 @@ describe("Errors", () => {
       n++;
       throw s.get();
     });
-    const w = new Signal.subtle.Watcher(() => {});
+    const w = new Signal.subtle.Watcher(() => { });
     w.watch(c);
 
     expect(n).toBe(0);
@@ -502,7 +509,7 @@ describe("Pruning", () => {
     const c2 = new Signal.Computed(() => (n2++, c.get(), 5));
     let n3 = 0;
     const c3 = new Signal.Computed(() => (n3++, c2.get()));
-    const w = new Signal.subtle.Watcher(() => {});
+    const w = new Signal.subtle.Watcher(() => { });
     w.watch(c3);
 
     expect(n).toBe(0);
@@ -676,7 +683,7 @@ describe("Custom equality", () => {
 describe("Receivers", () => {
   it("is this for computed", () => {
     let receiver;
-    const c = new Signal.Computed(function () {
+    const c = new Signal.Computed(function() {
       receiver = this;
     });
     expect(c.get()).toBe(undefined);
@@ -694,7 +701,7 @@ describe("Receivers", () => {
     });
     expect(r1).toBe(undefined);
     expect(r2).toBe(undefined);
-    const w = new Signal.subtle.Watcher(() => {});
+    const w = new Signal.subtle.Watcher(() => { });
     w.watch(s);
     expect(r1).toBe(s);
     expect(r2).toBe(undefined);
@@ -731,7 +738,7 @@ describe("Dynamic dependencies", () => {
       return str;
     });
     if (live) {
-      const w = new Signal.subtle.Watcher(() => {});
+      const w = new Signal.subtle.Watcher(() => { });
       w.watch(computed);
     }
     expect(computed.get()).toBe("abcdefgh");
@@ -920,8 +927,8 @@ describe("type checks", () => {
   it("checks types in methods", () => {
     let x = {};
     let s = new Signal.State(1);
-    let c = new Signal.Computed(() => {});
-    let w = new Signal.subtle.Watcher(() => {});
+    let c = new Signal.Computed(() => { });
+    let w = new Signal.subtle.Watcher(() => { });
 
     expect(() => Signal.State.prototype.get.call(x)).toThrowError(TypeError);
     expect(Signal.State.prototype.get.call(s)).toBe(1);
