@@ -206,7 +206,7 @@ export namespace subtle {
     constructor(notify: (this: Watcher) => void) {
       let node = Object.create(REACTIVE_NODE);
       node.wrapper = this;
-      node.consumerMarkedDirty = notify;
+      node.consumerMarkedDirty = () => notify.call(this);
       node.consumerIsAlwaysLive = true;
       node.consumerAllowSignalWrites = false;
       node.producerNode = [];

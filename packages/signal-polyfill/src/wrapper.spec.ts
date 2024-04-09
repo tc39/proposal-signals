@@ -195,6 +195,36 @@ describe("Watcher", () => {
     flushPending();
 
   });
+
+  it("provides `this` to notify as normal function", () => {
+    const mockGetPending = vi.fn();
+
+    const watcher = new Signal.subtle.Watcher(function() {
+      this.getPending();
+    });
+    watcher.getPending = mockGetPending;
+
+    const signal = new Signal.State<number>(0);
+    watcher.watch(signal);
+
+    signal.set(1);
+    expect(mockGetPending).toBeCalled();
+  });
+
+  it("can be closed in if needed in notify as an arrow function", () => {
+    const mockGetPending = vi.fn();
+
+    const watcher = new Signal.subtle.Watcher(() => {
+      watcher.getPending();
+    });
+    watcher.getPending = mockGetPending;
+
+    const signal = new Signal.State<number>(0);
+    watcher.watch(signal);
+
+    signal.set(1);
+    expect(mockGetPending).toBeCalled();
+  });
 });
 
 describe("Expected class shape", () => {
