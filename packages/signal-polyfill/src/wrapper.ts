@@ -126,6 +126,10 @@ export class Computed<T> {
     }
   }
 
+  toJSON() {
+    return this.get();
+  }
+
   get(): T {
     if (!isComputed(this))
       throw new TypeError(

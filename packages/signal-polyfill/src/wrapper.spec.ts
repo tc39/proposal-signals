@@ -32,7 +32,6 @@ describe("Signal.State", () => {
     const stateSignal = new Signal.State(10);
 
     expect(JSON.stringify(stateSignal)).toEqual("10");
-
   });
 });
 
@@ -51,6 +50,16 @@ describe("Computed", () => {
 
     expect(stateSignal.get()).toEqual(5);
     expect(computedSignal.get()).toEqual(10);
+  });
+
+  it("is works with JSON.stringify", () => {
+    const stateSignal = new Signal.State(10);
+    const computedSignal = new Signal.Computed(() => {
+      const f = stateSignal.get() * 2;
+      return f;
+    });
+
+    expect(JSON.stringify(computedSignal)).toEqual("20");
   });
 });
 
