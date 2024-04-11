@@ -1,7 +1,7 @@
 # 🚦 JavaScript Signals standard proposal🚦
 <img align=right src="signals-logo.png" alt="Signals logo" width=100>
 
-Stage 0
+Stage 1
 
 Authors: Rob Eisenberg and Daniel Ehrenberg
 
