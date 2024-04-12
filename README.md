@@ -1,7 +1,7 @@
 # 🚦 JavaScript Signals standard proposal🚦
 <img align=right src="signals-logo.png" alt="Signals logo" width=100>
 
-Stage 1
+Stage 1 ([explanation](https://tc39.es/process-document/))
 
 Authors: Rob Eisenberg and Daniel Ehrenberg
 
