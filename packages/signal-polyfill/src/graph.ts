@@ -6,11 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-// Required as the signals library is in a separate package, so we need to explicitly ensure the
-// global `ngDevMode` type is defined.
-declare const ngDevMode: boolean|undefined;
-
-
 /**
  * The currently active consumer `ReactiveNode`, if running code in a reactive context.
  *
@@ -215,7 +210,7 @@ interface ProducerNode extends ReactiveNode {
 export function producerAccessed(node: ReactiveNode): void {
   if (inNotificationPhase) {
     throw new Error(
-        typeof ngDevMode !== 'undefined' && ngDevMode ?
+        import.meta?.env?.DEBUG ?
             `Assertion error: signal read during notification phase` :
             '');
   }
@@ -462,7 +457,7 @@ export function producerRemoveLiveConsumerAtIndex(node: ReactiveNode, idx: numbe
   assertProducerNode(node);
   assertConsumerNode(node);
 
-  if (typeof ngDevMode !== 'undefined' && ngDevMode && idx >= node.liveConsumerNode.length) {
+  if (import.meta?.env?.DEBUG && idx >= node.liveConsumerNode.length) {
     throw new Error(`Assertion error: active consumer index ${idx} is out of bounds of ${
         node.liveConsumerNode.length} consumers)`);
   }
