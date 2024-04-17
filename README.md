@@ -465,7 +465,7 @@ Signal algorithms need to reference certain global state. This state is global f
 1. Set this Signal's `value` to `initialValue`.
 1. Set this Signal's `equals` to options?.equals
 1. Set this Signal's `watched` to options?.[Signal.subtle.watched]
-1. Set this Signal's `unwatched` to options?.[Signal.subtle.watched]
+1. Set this Signal's `unwatched` to options?.[Signal.subtle.unwatched]
 1. Set this Signal's `sinks` to the empty set
 1. Set `state` to `~clean~`.
 
