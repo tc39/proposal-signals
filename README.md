@@ -3,7 +3,9 @@
 
 Stage 1 ([explanation](https://tc39.es/process-document/))
 
-Authors: Rob Eisenberg and Daniel Ehrenberg
+TC39 proposal champions: Daniel Ehrenberg, Yehuda Katz, Jatin Ramanathan, Shay Lewis, Kristen Hewell Garrett, Dominic Gannaway, Preston Sego, Milo M, Rob Eisenberg
+
+Original authors: Rob Eisenberg and Daniel Ehrenberg
 
 This document describes an early common direction for signals in JavaScript, similar to the Promises/A+ effort which preceded the Promises standardized by TC39 in ES2015. Try it for yourself, using [a polyfill](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill).
 
