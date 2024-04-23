@@ -484,11 +484,11 @@ describe("Errors", () => {
 
 describe("Cycles", () => {
   it("detects trivial cycles", () => {
-    const c = new Signal.Computed(() => c.get());
+    const c: Signal.Computed<never> = new Signal.Computed(() => c.get());
     expect(() => c.get()).toThrow();
   });
   it("detects slightly larger cycles", () => {
-    const c = new Signal.Computed(() => c2.get());
+    const c: Signal.Computed<never> = new Signal.Computed(() => c2.get());
     const c2 = new Signal.Computed(() => c.get());
     const c3 = new Signal.Computed(() => c2.get());
     expect(() => c3.get()).toThrow();
@@ -706,7 +706,7 @@ describe("Custom equality", () => {
 describe("Receivers", () => {
   it("is this for computed", () => {
     let receiver;
-    const c = new Signal.Computed(function () {
+    const c = new Signal.Computed(function (this: Signal.Computed<void>) {
       receiver = this;
     });
     expect(c.get()).toBe(undefined);
@@ -752,7 +752,7 @@ describe("Receivers", () => {
 });
 
 describe("Dynamic dependencies", () => {
-  function run(live) {
+  function run(live: boolean) {
     const states = Array.from("abcdefgh").map((s) => new Signal.State(s));
     const sources = new Signal.State(states);
     const computed = new Signal.Computed(() => {
@@ -978,6 +978,7 @@ describe("type checks", () => {
       TypeError,
     );
     expect(Signal.subtle.Watcher.prototype.watch.call(w, s)).toBe(undefined);
+    // @ts-expect-error
     expect(() => Signal.subtle.Watcher.prototype.watch.call(w, w)).toThrowError(
       TypeError,
     );
@@ -993,18 +994,23 @@ describe("type checks", () => {
     ).toThrowError(TypeError);
     expect(Signal.subtle.Watcher.prototype.unwatch.call(w, s)).toBe(undefined);
     expect(() =>
+      // @ts-expect-error
       Signal.subtle.Watcher.prototype.unwatch.call(w, w),
     ).toThrowError(TypeError);
 
     expect(() =>
+      // @ts-expect-error
       Signal.subtle.Watcher.prototype.getPending.call(x, s),
     ).toThrowError(TypeError);
     expect(() =>
+      // @ts-expect-error
       Signal.subtle.Watcher.prototype.getPending.call(s, s),
     ).toThrowError(TypeError);
     expect(() =>
+      // @ts-expect-error
       Signal.subtle.Watcher.prototype.getPending.call(c, s),
     ).toThrowError(TypeError);
+    // @ts-expect-error
     expect(Signal.subtle.Watcher.prototype.getPending.call(w, s)).toStrictEqual(
       [],
     );
@@ -1041,6 +1047,51 @@ describe("currentComputed", () => {
     );
     c.get();
     expect(c).toBe(context);
+  });
+});
+
+describe("Garbage Collection", () => {
+  it("collects out of scope consumers", async () => {
+    const a = new Signal.State(1);
+    let b: Signal.Computed<number> | undefined = new Signal.Computed(() =>
+      a.get()
+    );
+    b.get();
+    const weakB = new WeakRef(b);
+    b = undefined;
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+    global.gc!();
+
+    expect(weakB.deref()).toBeUndefined();
+  });
+  it("collects inactive dynamic sources", async () => {
+    let a = new Signal.State(1);
+    const b: Signal.Computed<number> | undefined = new Signal.Computed(() =>
+      a.get()
+    );
+    b.get();
+    const weakOldA = new WeakRef(a);
+    a = new Signal.State(1);
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+    global.gc!();
+
+    expect(weakOldA.deref()).toBeUndefined();
+  });
+  it("collects inactive dynamic sources after update", async () => {
+    let a = new Signal.State(1);
+    const b = new Signal.State(1);
+    const c: Signal.Computed<number> | undefined = new Signal.Computed(() =>
+      a.get() + b.get()
+    );
+    c.get();
+    const weakOldA = new WeakRef(a);
+    a = new Signal.State(1);
+    b.set(2);
+
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+    global.gc!();
+
+    expect(weakOldA.deref()).toBeUndefined();
   });
 });
 

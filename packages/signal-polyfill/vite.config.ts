@@ -11,7 +11,15 @@ export default defineConfig({
     lib: {
       entry,
       formats: ["es"],
-      fileName: "index"
-    }
-  }
+      fileName: "index",
+    },
+  },
+  test: {
+    pool: "forks",
+    poolOptions: {
+      forks: {
+        execArgv: ["--expose_gc"],
+      },
+    },
+  },
 });
