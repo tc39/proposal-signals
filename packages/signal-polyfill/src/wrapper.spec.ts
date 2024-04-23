@@ -1048,5 +1048,5 @@ describe("currentComputed", () => {
 // - The code for the callbacks (for reading signals and running watches)
 // - Paths around writes being prohibited during computed/effect
 // - Setters for various hooks
-// - ngDevMode
+// - import.meta.env.DEBUG
 // - Some predicates/getters for convenience, e.g., isReactive
