@@ -203,7 +203,7 @@ export namespace subtle {
     // When a (recursive) source of Watcher is written to, call this callback,
     // if it hasn't already been called since the last `watch` call.
     // No signals may be read or written during the notify.
-    constructor(notify: (this: Watcher) => void) {
+    constructor(notify: (this: Watcher, self: Watcher) => void) {
       let node = Object.create(REACTIVE_NODE);
       node.wrapper = this;
       node.consumerMarkedDirty = notify;
