@@ -10,20 +10,11 @@
     "declaration": true,
     "declarationMap": true,
     "noEmitOnError": false,
-    "lib": [
-      "DOM",
-      "ES2021"
-    ],
+    "lib": ["DOM", "ES2021"],
     "strict": true,
     "composite": true,
     "forceConsistentCasingInFileNames": true
   },
-  "exclude": [
-    "**/node_modules/**",
-    "**/*.spec.ts",
-    "**/dist/**/*"
-  ],
-  "include": [
-    "src"
-  ]
+  "exclude": ["**/node_modules/**", "**/*.spec.ts", "**/dist/**/*"],
+  "include": ["src"]
 }

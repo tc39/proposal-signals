@@ -17,6 +17,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "dev": "vite",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
     "build": "tsc && vite build",
     "test": "vitest"
   },
@@ -24,6 +26,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@types/node": "^20.11.25",
+    "prettier": "^3.2.5",
     "typescript": "latest",
     "vite": "^5.2.6",
     "vite-plugin-dts": "^3.7.3",

@@ -15,11 +15,11 @@
  */
 
 /* eslint-disable @typescript-eslint/no-this-alias */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Signal } from './wrapper.js';
 
-describe("Signal.State", () => {
-  it("should work", () => {
+describe('Signal.State', () => {
+  it('should work', () => {
     const stateSignal = new Signal.State(0);
     expect(stateSignal.get()).toEqual(0);
 
@@ -29,8 +29,8 @@ describe("Signal.State", () => {
   });
 });
 
-describe("Computed", () => {
-  it("should work", () => {
+describe('Computed', () => {
+  it('should work', () => {
     const stateSignal = new Signal.State(1);
 
     const computedSignal = new Signal.Computed(() => {
@@ -47,7 +47,7 @@ describe("Computed", () => {
   });
 });
 
-describe("Watcher", () => {
+describe('Watcher', () => {
   type Destructor = () => void;
   const notifySpy = vi.fn();
 
@@ -75,7 +75,7 @@ describe("Watcher", () => {
 
   afterEach(() => watcher.unwatch(...Signal.subtle.introspectSources(watcher)));
 
-  it("should work", () => {
+  it('should work', () => {
     const watchedSpy = vi.fn();
     const unwatchedSpy = vi.fn();
     const stateSignal = new Signal.State(1, {
@@ -193,7 +193,6 @@ describe("Watcher", () => {
 
     stateSignal.set(300);
     flushPending();
-
   });
 
   it("provides `this` to notify as normal function", () => {
@@ -227,19 +226,19 @@ describe("Watcher", () => {
   });
 });
 
-describe("Expected class shape", () => {
-  it("should be on the prototype", () => {
-    expect(typeof Signal.State.prototype.get).toBe("function");
-    expect(typeof Signal.State.prototype.set).toBe("function");
-    expect(typeof Signal.Computed.prototype.get).toBe("function");
-    expect(typeof Signal.subtle.Watcher.prototype.watch).toBe("function");
-    expect(typeof Signal.subtle.Watcher.prototype.unwatch).toBe("function");
-    expect(typeof Signal.subtle.Watcher.prototype.getPending).toBe("function");
+describe('Expected class shape', () => {
+  it('should be on the prototype', () => {
+    expect(typeof Signal.State.prototype.get).toBe('function');
+    expect(typeof Signal.State.prototype.set).toBe('function');
+    expect(typeof Signal.Computed.prototype.get).toBe('function');
+    expect(typeof Signal.subtle.Watcher.prototype.watch).toBe('function');
+    expect(typeof Signal.subtle.Watcher.prototype.unwatch).toBe('function');
+    expect(typeof Signal.subtle.Watcher.prototype.getPending).toBe('function');
   });
 });
 
-describe("Comparison semantics", () => {
-  it("should cache State by Object.is", () => {
+describe('Comparison semantics', () => {
+  it('should cache State by Object.is', () => {
     const state = new Signal.State(NaN);
     let calls = 0;
     const computed = new Signal.Computed(() => {
@@ -254,7 +253,7 @@ describe("Comparison semantics", () => {
     expect(calls).toBe(1);
   });
 
-  it("should track Computed by Object.is", () => {
+  it('should track Computed by Object.is', () => {
     const state = new Signal.State(1);
     let value = 5;
     let calls = 0;
@@ -278,7 +277,7 @@ describe("Comparison semantics", () => {
     expect(calls).toBe(2);
   });
 
-  it("applies custom equality in State", () => {
+  it('applies custom equality in State', () => {
     let ecalls = 0;
     const state = new Signal.State(1, {
       equals() {
@@ -305,7 +304,7 @@ describe("Comparison semantics", () => {
     expect(calls).toBe(2);
   });
 
-  it("applies custom equality in Computed", () => {
+  it('applies custom equality in Computed', () => {
     const s = new Signal.State(5);
     let ecalls = 0;
     const c1 = new Signal.Computed(() => (s.get(), 1), {
@@ -334,8 +333,8 @@ describe("Comparison semantics", () => {
   });
 });
 
-describe("Untrack", () => {
-  it("works", () => {
+describe('Untrack', () => {
+  it('works', () => {
     const state = new Signal.State(1);
     const computed = new Signal.Computed(() =>
       Signal.subtle.untrack(() => state.get()),
@@ -344,7 +343,7 @@ describe("Untrack", () => {
     state.set(2);
     expect(computed.get()).toBe(1);
   });
-  it("works differently without untrack", () => {
+  it('works differently without untrack', () => {
     const state = new Signal.State(1);
     const computed = new Signal.Computed(() => state.get());
     expect(computed.get()).toBe(1);
@@ -353,8 +352,8 @@ describe("Untrack", () => {
   });
 });
 
-describe("liveness", () => {
-  it("only changes on first and last descendant", () => {
+describe('liveness', () => {
+  it('only changes on first and last descendant', () => {
     const watchedSpy = vi.fn();
     const unwatchedSpy = vi.fn();
     const state = new Signal.State(1, {
@@ -386,7 +385,7 @@ describe("liveness", () => {
     expect(unwatchedSpy).toBeCalledTimes(1);
   });
 
-  it("is tracked well on computed signals", () => {
+  it('is tracked well on computed signals', () => {
     const watchedSpy = vi.fn();
     const unwatchedSpy = vi.fn();
     const s = new Signal.State(1);
@@ -410,9 +409,9 @@ describe("liveness", () => {
   });
 });
 
-describe("Errors", () => {
-  it("are cached by computed signals", () => {
-    const s = new Signal.State("first");
+describe('Errors', () => {
+  it('are cached by computed signals', () => {
+    const s = new Signal.State('first');
     let n = 0;
     const c = new Signal.Computed(() => {
       n++;
@@ -424,26 +423,26 @@ describe("Errors", () => {
       return c.get();
     });
     expect(n).toBe(0);
-    expect(() => c.get()).toThrowError("first");
-    expect(() => c2.get()).toThrowError("first");
+    expect(() => c.get()).toThrowError('first');
+    expect(() => c2.get()).toThrowError('first');
     expect(n).toBe(1);
     expect(n2).toBe(1);
-    expect(() => c.get()).toThrowError("first");
-    expect(() => c2.get()).toThrowError("first");
+    expect(() => c.get()).toThrowError('first');
+    expect(() => c2.get()).toThrowError('first');
     expect(n).toBe(1);
     expect(n2).toBe(1);
-    s.set("second");
-    expect(() => c.get()).toThrowError("second");
-    expect(() => c2.get()).toThrowError("second");
+    s.set('second');
+    expect(() => c.get()).toThrowError('second');
+    expect(() => c2.get()).toThrowError('second');
     expect(n).toBe(2);
     expect(n2).toBe(2);
 
     // Doesn't retrigger on setting state to the same value
-    s.set("second");
+    s.set('second');
     expect(n).toBe(2);
   });
-  it("are cached by computed signals when watched", () => {
-    const s = new Signal.State("first");
+  it('are cached by computed signals when watched', () => {
+    const s = new Signal.State('first');
     let n = 0;
     const c = new Signal.Computed<unknown>(() => {
       n++;
@@ -453,41 +452,43 @@ describe("Errors", () => {
     w.watch(c);
 
     expect(n).toBe(0);
-    expect(() => c.get()).toThrowError("first");
+    expect(() => c.get()).toThrowError('first');
     expect(n).toBe(1);
-    expect(() => c.get()).toThrowError("first");
+    expect(() => c.get()).toThrowError('first');
     expect(n).toBe(1);
-    s.set("second");
-    expect(() => c.get()).toThrowError("second");
+    s.set('second');
+    expect(() => c.get()).toThrowError('second');
     expect(n).toBe(2);
 
-    s.set("second");
+    s.set('second');
     expect(n).toBe(2);
   });
-  it("are cached by computed signals when equals throws", () => {
+  it('are cached by computed signals when equals throws', () => {
     const s = new Signal.State(0);
     const cSpy = vi.fn(() => s.get());
     const c = new Signal.Computed(cSpy, {
-      equals() { throw new Error("equals"); },
+      equals() {
+        throw new Error('equals');
+      },
     });
 
     c.get();
     s.set(1);
 
     // Error is cached; c throws again without needing to rerun.
-    expect(() => c.get()).toThrowError("equals");
+    expect(() => c.get()).toThrowError('equals');
     expect(cSpy).toBeCalledTimes(2);
-    expect(() => c.get()).toThrowError("equals");
+    expect(() => c.get()).toThrowError('equals');
     expect(cSpy).toBeCalledTimes(2);
-  })
+  });
 });
 
-describe("Cycles", () => {
-  it("detects trivial cycles", () => {
+describe('Cycles', () => {
+  it('detects trivial cycles', () => {
     const c = new Signal.Computed(() => c.get());
     expect(() => c.get()).toThrow();
   });
-  it("detects slightly larger cycles", () => {
+  it('detects slightly larger cycles', () => {
     const c = new Signal.Computed(() => c2.get());
     const c2 = new Signal.Computed(() => c.get());
     const c3 = new Signal.Computed(() => c2.get());
@@ -495,8 +496,8 @@ describe("Cycles", () => {
   });
 });
 
-describe("Pruning", () => {
-  it("only recalculates until things are equal", () => {
+describe('Pruning', () => {
+  it('only recalculates until things are equal', () => {
     const s = new Signal.State(0);
     let n = 0;
     const c = new Signal.Computed(() => (n++, s.get()));
@@ -524,7 +525,7 @@ describe("Pruning", () => {
     expect(n2).toBe(2);
     expect(n3).toBe(1);
   });
-  it("does similar pruning for live signals", () => {
+  it('does similar pruning for live signals', () => {
     const s = new Signal.State(0);
     let n = 0;
     const c = new Signal.Computed(() => (n++, s.get()));
@@ -560,8 +561,8 @@ describe("Pruning", () => {
   });
 });
 
-describe("Prohibited contexts", () => {
-  it("allows writes during computed", () => {
+describe('Prohibited contexts', () => {
+  it('allows writes during computed', () => {
     const s = new Signal.State(1);
     const c = new Signal.Computed(() => (s.set(s.get() + 1), s.get()));
     expect(c.get()).toBe(2);
@@ -577,7 +578,7 @@ describe("Prohibited contexts", () => {
     expect(c.get()).toBe(4);
     expect(s.get()).toBe(4);
   });
-  it("disallows reads and writes during watcher notify", () => {
+  it('disallows reads and writes during watcher notify', () => {
     const s = new Signal.State(1);
     const w = new Signal.subtle.Watcher(() => {
       s.get();
@@ -597,8 +598,8 @@ describe("Prohibited contexts", () => {
   });
 });
 
-describe("Custom equality", () => {
-  it("works for State", () => {
+describe('Custom equality', () => {
+  it('works for State', () => {
     let answer = true;
     const s = new Signal.State(1, {
       equals() {
@@ -627,7 +628,7 @@ describe("Custom equality", () => {
     expect(c.get()).toBe(2);
     expect(n).toBe(3);
   });
-  it("works for Computed", () => {
+  it('works for Computed', () => {
     let answer = true;
     let value = 1;
     const u = new Signal.State(1);
@@ -659,7 +660,7 @@ describe("Custom equality", () => {
     expect(c.get()).toBe(2);
     expect(n).toBe(3);
   });
-  it("does not leak tracking information", () => {
+  it('does not leak tracking information', () => {
     const exact = new Signal.State(1);
     const epsilon = new Signal.State(0.1);
     const counter = new Signal.State(1);
@@ -667,7 +668,7 @@ describe("Custom equality", () => {
     const cutoff = vi.fn((a, b) => Math.abs(a - b) < epsilon.get());
     const innerFn = vi.fn(() => exact.get());
     const inner = new Signal.Computed(innerFn, {
-      equals: cutoff
+      equals: cutoff,
     });
 
     const outerFn = vi.fn(() => {
@@ -684,7 +685,7 @@ describe("Custom equality", () => {
 
     exact.set(2);
     counter.set(2);
-    outer.get()
+    outer.get();
 
     // `outer` reruns because `counter` changed, `inner` reruns when called by
     // `outer`, and `cutoff` is called for the first time.
@@ -703,8 +704,8 @@ describe("Custom equality", () => {
   });
 });
 
-describe("Receivers", () => {
-  it("is this for computed", () => {
+describe('Receivers', () => {
+  it('is this for computed', () => {
     let receiver;
     const c = new Signal.Computed(function () {
       receiver = this;
@@ -712,7 +713,7 @@ describe("Receivers", () => {
     expect(c.get()).toBe(undefined);
     expect(receiver).toBe(c);
   });
-  it("is this for watched/unwatched", () => {
+  it('is this for watched/unwatched', () => {
     let r1, r2;
     const s = new Signal.State(1, {
       [Signal.subtle.watched]() {
@@ -731,7 +732,7 @@ describe("Receivers", () => {
     w.unwatch(s);
     expect(r2).toBe(s);
   });
-  it("is this for equals", () => {
+  it('is this for equals', () => {
     let receiver;
     const options = {
       equals() {
@@ -751,12 +752,12 @@ describe("Receivers", () => {
   });
 });
 
-describe("Dynamic dependencies", () => {
+describe('Dynamic dependencies', () => {
   function run(live) {
-    const states = Array.from("abcdefgh").map((s) => new Signal.State(s));
+    const states = Array.from('abcdefgh').map((s) => new Signal.State(s));
     const sources = new Signal.State(states);
     const computed = new Signal.Computed(() => {
-      let str = "";
+      let str = '';
       for (const state of sources.get()) str += state.get();
       return str;
     });
@@ -764,29 +765,29 @@ describe("Dynamic dependencies", () => {
       const w = new Signal.subtle.Watcher(() => {});
       w.watch(computed);
     }
-    expect(computed.get()).toBe("abcdefgh");
+    expect(computed.get()).toBe('abcdefgh');
     expect(Signal.subtle.introspectSources(computed).slice(1)).toStrictEqual(
       states,
     );
 
     sources.set(states.slice(0, 5));
-    expect(computed.get()).toBe("abcde");
+    expect(computed.get()).toBe('abcde');
     expect(Signal.subtle.introspectSources(computed).slice(1)).toStrictEqual(
       states.slice(0, 5),
     );
 
     sources.set(states.slice(3));
-    expect(computed.get()).toBe("defgh");
+    expect(computed.get()).toBe('defgh');
     expect(Signal.subtle.introspectSources(computed).slice(1)).toStrictEqual(
       states.slice(3),
     );
   }
-  it("works live", () => run(true));
-  it("works not live", () => run(false));
+  it('works live', () => run(true));
+  it('works not live', () => run(false));
 });
 
-describe("watch and unwatch", () => {
-  it("handles multiple watchers well", () => {
+describe('watch and unwatch', () => {
+  it('handles multiple watchers well', () => {
     const s = new Signal.State(1);
     const s2 = new Signal.State(2);
     let n = 0;
@@ -813,7 +814,7 @@ describe("watch and unwatch", () => {
     s.set(2);
     expect(n).toBe(3);
   });
-  it("understands dynamic dependency sets", () => {
+  it('understands dynamic dependency sets', () => {
     let w1 = 0,
       u1 = 0,
       w2 = 0,
@@ -946,8 +947,8 @@ describe("watch and unwatch", () => {
   });
 });
 
-describe("type checks", () => {
-  it("checks types in methods", () => {
+describe('type checks', () => {
+  it('checks types in methods', () => {
     let x = {};
     let s = new Signal.State(1);
     let c = new Signal.Computed(() => {});
@@ -1032,8 +1033,8 @@ describe("type checks", () => {
   });
 });
 
-describe("currentComputed", () => {
-  it("works", () => {
+describe('currentComputed', () => {
+  it('works', () => {
     expect(Signal.subtle.currentComputed()).toBe(undefined);
     let context;
     let c = new Signal.Computed(
