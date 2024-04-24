@@ -214,10 +214,7 @@ interface ProducerNode extends ReactiveNode {
  */
 export function producerAccessed(node: ReactiveNode): void {
   if (inNotificationPhase) {
-    throw new Error(
-        typeof ngDevMode !== 'undefined' && ngDevMode ?
-            `Assertion error: signal read during notification phase` :
-            '');
+    throw new Error('Assertion error: signal read during notification phase');
   }
 
   if (activeConsumer === null) {
