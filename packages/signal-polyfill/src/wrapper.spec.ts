@@ -225,6 +225,20 @@ describe("Watcher", () => {
     signal.set(1);
     expect(mockGetPending).toBeCalled();
   });
+
+  it("does not store duplicated watchers for the same signal", () => {
+    const watcher = new Signal.subtle.Watcher(() => {});
+    const signal = new Signal.State<number>(0);
+    const computed = new Signal.Computed(() => signal.get() + 1);
+    watcher.watch(signal);
+    watcher.watch(signal);
+    watcher.watch(computed);
+    watcher.watch(computed);
+    watcher.watch(computed);
+    expect(Signal.subtle.introspectSources(watcher).length).toBe(2);
+    expect(Signal.subtle.introspectSources(watcher)[0]).toBe(signal);
+    expect(Signal.subtle.introspectSources(watcher)[1]).toBe(computed);
+  });
 });
 
 describe("Expected class shape", () => {
