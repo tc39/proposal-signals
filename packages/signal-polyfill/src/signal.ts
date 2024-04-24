@@ -10,10 +10,6 @@ import {defaultEquals, ValueEqualityFn} from './equality.js';
 import {throwInvalidWriteToSignalError} from './errors.js';
 import {producerAccessed, producerIncrementEpoch, producerNotifyConsumers, producerUpdatesAllowed, REACTIVE_NODE, ReactiveNode, SIGNAL} from './graph.js';
 
-// Required as the signals library is in a separate package, so we need to explicitly ensure the
-// global `ngDevMode` type is defined.
-declare const ngDevMode: boolean|undefined;
-
 /**
  * If set, called after `WritableSignal`s are updated.
  *
