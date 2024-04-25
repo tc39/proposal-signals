@@ -234,10 +234,15 @@ export namespace subtle {
       this.#assertSignals(signals);
 
       const node = this[NODE];
+      assertConsumerNode(node);
+
       node.dirty = false;  // Give the watcher a chance to trigger again
       const prev = setActiveConsumer(node);
+
       for (const signal of signals) {
-        producerAccessed(signal[NODE]);
+        if(!node.producerNode.includes(signal[NODE])) {
+          producerAccessed(signal[NODE]);
+        }
       }
       setActiveConsumer(prev);
     }
