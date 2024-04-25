@@ -239,9 +239,8 @@ export namespace subtle {
       node.dirty = false;  // Give the watcher a chance to trigger again
       const prev = setActiveConsumer(node);
 
-      const producerNodeSet = new Set(node.producerNode);
       for (const signal of signals) {
-        if(!producerNodeSet.has(signal[NODE])) {
+        if(!node.producerNode.includes(signal[NODE])) {
           producerAccessed(signal[NODE]);
         }
       }
