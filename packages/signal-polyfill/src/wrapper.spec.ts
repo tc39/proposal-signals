@@ -558,6 +558,35 @@ describe("Pruning", () => {
 
     expect(w.getPending().length).toBe(0);
   });
+  it("does not recompute when the dependent values go back to the ones used for last computation", () => {
+    const s = new Signal.State(0);
+    let n = 0;
+    const c = new Signal.Computed(() => (n++, s.get()));
+    expect(n).toBe(0);
+    expect(c.get()).toBe(0);
+    expect(n).toBe(1);
+    s.set(1);
+    expect(n).toBe(1);
+    s.set(0);
+    expect(n).toBe(1);
+    expect(c.get()).toBe(0); // the last time c was computed was with s = 0, no need to recompute
+    expect(n).toBe(1);
+  });
+  it("does not recompute when the dependent values go back to the ones used for last computation (with extra computed)", () => {
+    const s = new Signal.State(0);
+    let n = 0;
+    const extra = new Signal.Computed(() => s.get());
+    const c = new Signal.Computed(() => (n++, extra.get()));
+    expect(n).toBe(0);
+    expect(c.get()).toBe(0);
+    expect(n).toBe(1);
+    s.set(1);
+    expect(n).toBe(1);
+    s.set(0);
+    expect(n).toBe(1);
+    expect(c.get()).toBe(0); // the last time c was computed was with s = 0, no need to recompute
+    expect(n).toBe(1);
+  });
 });
 
 describe("Prohibited contexts", () => {
