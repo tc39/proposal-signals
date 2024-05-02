@@ -492,6 +492,38 @@ Signal algorithms need to reference certain global state. This state is global f
 
 ### The `Signal.Computed` class
 
+#### `Signal.Computed` State machine
+
+The `state` of a Computed Signal may be one of the following:
+
+- `~clean~`: The Signal's value is present and known not to be stale.
+- `~checked~`: An (indirect) source of this Signal has changed; this Signal has a value but it _may_ be stale. Whether or it not is stale will be known only when all immediate sources have been evaluated.
+- `~computing~`: This Signal's callback is currently being executed as a side-effect of a `.get()` call.
+- `~dirty~`: Either this Signal has a value which is known to be stale, or it has never been evaluated.
+
+The transition graph is as follows:
+
+```mermaid
+stateDiagram-v2
+    [*] --> dirty
+    dirty --> computing: [4]
+    computing --> clean: [5]
+    clean --> dirty: [2]
+    clean --> checked: [3]
+    checked --> clean: [6]
+    checked --> dirty: [1]
+```
+
+The transitions are:
+| Number | From | To | Condition | Algorithm |
+| ------ | ---- | -- | --------- | --------- |
+| 1 | `~checked~` | `~dirty~` | An immediate source of this signal, which is a computed signal, has been evaluated, and its value has changed. | Algorithm: recalculate dirty computed Signal |
+| 2 | `~clean~` | `~dirty~` | An immediate source of this signal, which is a State, has been set, with a value which is not equal to its previous value. | Method: `Signal.State.prototype.set(newValue)` |
+| 3 | `~clean~` | `~checked~` | A recursive, but not immediate, source of this signal, which is a State, has been set, with a value which is not equal to its previous value. | Method: `Signal.State.prototype.set(newValue)` |
+| 4 | `~dirty~` | `~computing~` | We are about to execute the `callback`. | Algorithm: recalculate dirty computed Signal |
+| 5 | `~computing~` | `~clean~` | The `callback` has finished evaluating and either returned a value or thrown an exception. | Algorithm: recalculate dirty computed Signal |
+| 6 | `~checked~` | `~clean~` | All immediate sources of this signal have been evaluated, and all have been discovered unchanged, so we are now known not to be stale. | Algorithm: recalculate dirty computed Signal |
+
 #### `Signal.Computed` Internal slots
 
 - `value`: The previous cached value of the Signal, or `~uninitialized~` for a never-read computed Signal. The value may be an exception which gets rethrown when the value is read. Always `undefined` for effect signals.
