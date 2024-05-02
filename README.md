@@ -486,7 +486,10 @@ Signal algorithms need to reference certain global state. This state is global f
 1. Set the `state` of all `sinks` of this Signal to (if it is a Computed Signal) `~dirty~` if they were previously clean, or (if it is a Watcher) `~pending~` if it was previously `~watching~`.
 1. Set the `state` of all of the sinks' Computed Signal dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place), or for Watchers, `~pending~` if previously `~watching~`.
 1. For each previously `~watching~` Watcher encountered in that recursive search, then in depth-first order,
-    1. Set `notifying` to true while calling their `notify` callback (saving aside any exception thrown, but ignoring the return value of `notify`), and then restore `notifying` to false.
+    1. Set `notifying` to true.
+    1. Calling their `notify` callback (saving aside any exception thrown, but ignoring the return value of `notify`).
+    1. Restore `notifying` to false.
+    1. Set the `state` of the Watcher to `~waiting~`.
 1. If any exception was thrown from the `notify` callbacks, propagate it to the caller after all `notify` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
 1. Return undefined.
 
@@ -555,6 +558,33 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 ### The `Signal.subtle.Watcher` class
 
+#### `Signal.subtle.Watcher` State machine
+
+The `state` of a Watcher may be one of the following:
+
+- `~waiting~`: The `notify` callback has been run, or the Watcher is new, but is not actively watching any signals.
+- `~watching~`: The Watcher is actively watching signals, but no changes have yet happened which would necessitate a `notify` callback.
+- `~pending~`: A dependency of the Watcher has changed, but the `notify` callback has not yet been run.
+
+The transition graph is as follows:
+
+```mermaid
+stateDiagram-v2
+    [*] --> waiting
+    waiting --> watching: [1]
+    watching --> waiting: [2]
+    watching --> pending: [3]
+    pending --> waiting: [4]
+```
+
+The transitions are:
+| Number | From | To | Condition | Algorithm |
+| ------ | ---- | -- | --------- | --------- |
+| 1 | `~waiting~` | `~watching~` | The Watcher's `watch` method has been called. | Method: `Signal.subtle.Watcher.prototype.watch(...signals)` |
+| 2 | `~watching~` | `~waiting~` | The Watcher's `unwatch` method has been called, and the last watched signal has been removed. | Method: `Signal.subtle.Watcher.prototype.unwatch(...signals)` |
+| 3 | `~watching~` | `~pending~` | A watched signal may have changed value. | Method: `Signal.State.prototype.set(newValue)` |
+| 4 | `~pending~` | `~waiting~` | The `notify` callback has been run. | Method: `Signal.State.prototype.set(newValue)` |
+
 #### `Signal.subtle.Watcher` internal slots
 
 - `state`: May be `~watching~`, `~pending~` or `~waiting~`
@@ -575,6 +605,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 1. Append all arguments to the end of this object's `signals`.
 1. Add this watcher to each of the newly watched signals as a sink.
 1. Add this watcher as a `sink` to each Signal. If this was the first sink, then recurse up to sources to add that signal as a sink, and call the `watched` callback if it exists.
+1. If the Signal's `state` is `~waiting~`, then set it to `~watching~`.
 
 #### Method: `Signal.subtle.Watcher.prototype.unwatch(...signals)`
 
@@ -582,6 +613,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 1. Remove each element from signals from this object's `signals`.
 1. Remove this Watcher from that Signal's `sink` set.
 1. If any Signal's `sink` set is now empty, then remove itself as a sink from each of its sources, and call the `unwatched` callback if it exists
+1. If the watcher now has no `signals`, and its `state` is `~watching~`, then set it to `~waiting~`.
 
 #### Method: `Signal.subtle.Watcher.prototype.getPending()`
 
