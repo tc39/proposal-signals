@@ -7,7 +7,7 @@ TC39 proposal champions: Daniel Ehrenberg, Yehuda Katz, Jatin Ramanathan, Shay L
 
 Original authors: Rob Eisenberg and Daniel Ehrenberg
 
-This document describes an early common direction for signals in JavaScript, similar to the Promises/A+ effort which preceded the Promises standardized by TC39 in ES2015. Try it for yourself, using [a polyfill](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill).
+This document describes an early common direction for signals in JavaScript, similar to the Promises/A+ effort which preceded the Promises standardized by TC39 in ES2015. Try it for yourself, using [a polyfill](https://github.com/proposal-signals/signal-polyfill).
 
 Similarly to Promises/A+, this effort focuses on aligning the JavaScript ecosystem. If this alignment is successful, then a standard could emerge, based on that experience. Several framework authors are collaborating here on a common model which could back their reactivity core. The current draft is based on design input from the authors/maintainers of [Angular](https://angular.io/), [Bubble](https://bubble.io/), [Ember](https://emberjs.com/), [FAST](https://www.fast.design/), [MobX](https://mobx.js.org/), [Preact](https://preactjs.com/), [Qwik](https://qwik.dev/), [RxJS](https://rxjs.dev/), [Solid](https://www.solidjs.com/), [Starbeam](https://www.starbeamjs.com/), [Svelte](https://svelte.dev/), [Vue](https://vuejs.org/), [Wiz](https://blog.angular.io/angular-and-wiz-are-better-together-91e633d8cd5a), and more…
 
@@ -420,7 +420,7 @@ Some possible [convenience methods](https://github.com/proposal-signals/proposal
 
 This proposal is on the April 2024 TC39 agenda for Stage 1. It can currently be thought of as "Stage 0".
 
-[A polyfill](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill) for this proposal is available, with some basic tests. Some framework authors have begun experimenting with substituting this signal implementation, but this usage is at an early stage.
+[A polyfill](https://github.com/proposal-signals/signal-polyfill) for this proposal is available, with some basic tests. Some framework authors have begun experimenting with substituting this signal implementation, but this usage is at an early stage.
 
 The collaborators on the Signal proposal want to be especially **conservative** in how we push this proposal forward, so that we don't land in the trap of getting something shipped which we end up regretting and not actually using. Our plan is to do the following extra tasks, not required by the TC39 process, to make sure that this proposal is on track:
 
@@ -678,7 +678,7 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 
 **Q**: Is it going to be ergonomic to use Signals in the context of class-based frameworks like Angular and Lit? What about compiler-based frameworks like Svelte?
 
-**A**: Class fields can be made Signal-based with a simple accessor decorator, as shown in [the Signal polyfill readme](https://github.com/proposal-signals/proposal-signals/tree/main/packages/signal-polyfill#combining-signals-and-decorators). Signals are very closely aligned to Svelte 5's Runes--it is simple for a compiler to transform runes to the Signal API defined here, and in fact this is what Svelte 5 does internally (but with its own Signals library).
+**A**: Class fields can be made Signal-based with a simple accessor decorator, as shown in [the Signal polyfill readme](https://github.com/proposal-signals/signal-polyfill#combining-signals-and-decorators). Signals are very closely aligned to Svelte 5's Runes--it is simple for a compiler to transform runes to the Signal API defined here, and in fact this is what Svelte 5 does internally (but with its own Signals library).
 
 **Q**: Do Signals work with SSR? Hydration? Resumability?
 
