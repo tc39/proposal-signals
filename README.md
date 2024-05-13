@@ -157,7 +157,7 @@ It turns out that existing Signal libraries are not all that different from each
     * Custom comparisons are possible for computed Signals as well as state Signals, to note when further computed Signals which depend on them should be updated.
 * Reactions to the condition where a computed Signal has one of its dependencies (or nested dependencies) become "dirty" and change, meaning that the Signal's value might be outdated.
     * This reaction is meant to schedule more significant work to be performed later.
-    * Effects are implemented in terms of these reactions, plus framework-level scheduling.
+    * s are implemented in terms of these reactions, plus framework-level scheduling.
     * Computed signals need the ability to react to whether they are registered as a (nested) dependency of one of these reactions.
 * Enable JS frameworks to do their own scheduling. No Promise-style built-in forced-on scheduling.
     * Synchronous reactions are needed to enable scheduling later work based on framework logic.
@@ -548,7 +548,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 #### Method: `Signal.Computed.prototype.get`
 
-1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
+1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is a Watcher and `computing` a computed Signal, throw an exception.
 1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set.
 1. NOTE: We do not add `computing` to this Signal's `sinks` set until/unless it becomes watched by a Watcher.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
