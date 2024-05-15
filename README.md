@@ -601,6 +601,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 #### Method: `Signal.subtle.Watcher.prototype.watch(...signals)`
 
+1. If `frozen` is true, throw an exception.
 1. If any of the arguments is not a signal, throw an exception.
 1. Append all arguments to the end of this object's `signals`.
 1. Add this watcher to each of the newly watched signals as a sink.
@@ -609,6 +610,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 #### Method: `Signal.subtle.Watcher.prototype.unwatch(...signals)`
 
+1. If `frozen` is true, throw an exception.
 1. If any of the arguments is not a signal, or is not being watched by this watcher, throw an exception.
 1. Remove each element from signals from this object's `signals`.
 1. Remove this Watcher from that Signal's `sink` set.
