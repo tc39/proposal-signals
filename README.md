@@ -607,7 +607,9 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 1. For each newly-watched signal, in left-to-right order,
     1. Add this watcher as a `sink` to that signal.
     1. If this was the first sink, then recurse up to sources to add that signal as a sink.
+    1. Set `frozen` to true.
     1. Call the `watched` callback if it exists.
+    1. Restore `frozen` to true.
 1. If the Signal's `state` is `~waiting~`, then set it to `~watching~`.
 
 #### Method: `Signal.subtle.Watcher.prototype.unwatch(...signals)`
