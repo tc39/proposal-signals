@@ -604,8 +604,10 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 1. If `frozen` is true, throw an exception.
 1. If any of the arguments is not a signal, throw an exception.
 1. Append all arguments to the end of this object's `signals`.
-1. Add this watcher to each of the newly watched signals as a sink.
-1. Add this watcher as a `sink` to each Signal. If this was the first sink, then recurse up to sources to add that signal as a sink, and call the `watched` callback if it exists.
+1. For each newly-watched signal, in left-to-right order,
+    1. Add this watcher as a `sink` to that signal.
+    1. If this was the first sink, then recurse up to sources to add that signal as a sink.
+    1. Call the `watched` callback if it exists.
 1. If the Signal's `state` is `~waiting~`, then set it to `~watching~`.
 
 #### Method: `Signal.subtle.Watcher.prototype.unwatch(...signals)`
