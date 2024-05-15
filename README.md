@@ -619,11 +619,10 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 1. For each signal in the arguments, in left-to-right order,
     1. Remove that signal from this Watcher's `signals` set.
     1. Remove this Watcher from that Signal's `sink` set.
-    1. If that Signal's `sink` set has become empty,
-        1. Remove that Signal as a sink from each of its sources.
-        1. Set `frozen` to true.
-        1. Call the `unwatched` callback if it exists.
-        1. Restore `frozen` to false.
+    1. If that Signal's `sink` set has become empty, remove that Signal as a sink from each of its sources.
+    1. Set `frozen` to true.
+    1. Call the `unwatched` callback if it exists.
+    1. Restore `frozen` to false.
 1. If the watcher now has no `signals`, and its `state` is `~watching~`, then set it to `~waiting~`.
 
 #### Method: `Signal.subtle.Watcher.prototype.getPending()`
