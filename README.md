@@ -361,7 +361,7 @@ const w = new Signal.subtle.Watcher(() => {
         queueMicrotask(() => {
             pending = false;
             for (let s of w.getPending()) {
-                        s.get();
+                s.get();
             }
             w.watch();
         });
