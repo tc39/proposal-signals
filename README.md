@@ -360,7 +360,9 @@ const w = new Signal.subtle.Watcher(() => {
         pending = true;
         queueMicrotask(() => {
             pending = false;
-            for (let s of w.getPending()) { s.get(); }
+            for (let s of w.getPending()) {
+                        s.get();
+            }
             w.watch();
         });
     }
