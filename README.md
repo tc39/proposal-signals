@@ -551,7 +551,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set.
 1. NOTE: We do not add `computing` to this Signal's `sinks` set until/unless it becomes watched by a Watcher.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
-    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
+    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is a Computed Signal marked `~dirty~` (cutting off search when hitting a `~clean~` Computed Signal, and including this Computed Signal as the last thing to search).
     1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
 1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
 
