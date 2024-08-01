@@ -462,7 +462,7 @@ Signal algorithms need to reference certain global state. This state is global f
 - `unwatched`: The callback to be called when the signal is no longer observed by an effect
 - `sinks`: Set of watched signals which depend on this one
 
-#### Constructor: `Signal(initialValue, options)`
+#### Constructor: `Signal.State(initialValue, options)`
 
 1. Set this Signal's `value` to `initialValue`.
 1. Set this Signal's `equals` to options?.equals
