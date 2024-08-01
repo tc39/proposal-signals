@@ -639,6 +639,10 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 Note: untrack doesn't get you out of the `frozen` state, which is maintained strictly.
 
+### Method: `Signal.subtle.currentComputed()`
+
+1. Return the current `computing` value.
+
 ### Common algorithms
 
 ##### Algorithm: recalculate dirty computed Signal
