@@ -626,7 +626,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 #### Method: `Signal.subtle.Watcher.prototype.getPending()`
 
-1. Return an Array containing the subset of `signals` which are in the state `dirty` or `pending`.
+1. Return an Array containing the subset of `signals` which are Computed Signals in the states `~dirty~` or `~pending~`.
 
 ### Method: `Signal.subtle.untrack(cb)`
 
