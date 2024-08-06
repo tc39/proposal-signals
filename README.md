@@ -442,7 +442,7 @@ Some aspects of the algorithm:
 
 Signal algorithms need to reference certain global state. This state is global for the entire thread, or "agent".
 
-- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` or `.run` call, or `undefined`. Initially `undefined`.
+- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` or `.run` call, or `null`. Initially `null`.
 - `frozen`: Boolean denoting whether there is a callback currently executing which requires that the graph not be modified. Initially `false`.
 - `generation`: An incrementing integer, starting at 0, used to track how current a value is while avoiding circularities.
 
@@ -549,7 +549,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 #### Method: `Signal.Computed.prototype.get`
 
 1. If the current execution context is `frozen` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
-1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set.
+1. If `computing` is not `null`, add this Signal to `computing`'s `sources` set.
 1. NOTE: We do not add `computing` to this Signal's `sinks` set until/unless it becomes watched by a Watcher.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
     1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
@@ -632,12 +632,16 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 ### Method: `Signal.subtle.untrack(cb)`
 
 1. Let `c` be the execution context's current `computing` state.
-1. Set `computing` to undefined.
+1. Set `computing` to null.
 1. Call `cb`.
 1. Restore `computing` to `c` (even if `cb` threw an exception).
 1. Return the return value of `cb` (rethrowing any exception).
 
 Note: untrack doesn't get you out of the `frozen` state, which is maintained strictly.
+
+### Method: `Signal.subtle.currentComputed()`
+
+1. Return the current `computing` value.
 
 ### Common algorithms
 
