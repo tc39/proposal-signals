@@ -646,7 +646,6 @@ Note: untrack doesn't get you out of the `frozen` state, which is maintained str
 1. Save the previous `computing` value and set `computing` to this Signal.
 1. Set this Signal's state to `~computing~`.
 1. Run this computed Signal's callback, using this Signal as the this value. Save the return value, and if the callback threw an exception, store that for rethrowing.
-1. Set this Signal's `recalculating` to false.
 1. Restore the previous `computing` value.
 1. Apply the "set Signal value" algorithm to the callback's return value.
 2. Set this Signal's state to `~clean~`.
