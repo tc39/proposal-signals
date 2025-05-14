@@ -386,7 +386,7 @@ Walking through the different operations used here: The `notify` callback passed
 
 Calls to `notify` are ultimately triggered by a call to `.set()` on some state Signal. This call is synchronous: it happens before `.set` returns. But there's no need to worry about this callback observing the Signal graph in a half-processed state, because during a `notify` callback, no Signal can be read or written, even in an `untrack` call. Because `notify` is called during `.set()`, it is interrupting another thread of logic, which might not be complete. To read or write Signals from `notify`, schedule work to run later, e.g., by writing the Signal down in a list to later be accessed, or with `queueMicrotask` as above.
 
-Note that it is perfectly possible to use Signals effectively without `Symbol.subtle.Watcher` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
+Note that it is perfectly possible to use Signals effectively without `Signal.subtle.Watcher` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
 
 Both computed and state Signals are garbage-collected like any JS values. But Watchers have a special way of holding things alive: Any Signals which are watched by a Watcher will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `Watcher.prototype.unwatch` to clean up effects.
 
