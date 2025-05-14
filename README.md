@@ -550,7 +550,7 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 #### Method: `Signal.Computed.prototype.get`
 
-1. If the current execution context is `frozen` or if this Signal has the state `~computing~`, or if this signal is an Effect and `computing` a computed Signal, throw an exception.
+1. If the current execution context is `frozen` or if this Signal has the state `~computing~`, or if this signal is a Watcher and `computing` a computed Signal, throw an exception.
 1. If `computing` is not `null`, add this Signal to `computing`'s `sources` set.
 1. NOTE: We do not add `computing` to this Signal's `sinks` set until/unless it becomes watched by a Watcher.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
