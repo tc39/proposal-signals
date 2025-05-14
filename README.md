@@ -46,7 +46,7 @@ const render = () => element.innerText = parity();
 setInterval(() => setCounter(counter + 1), 1000);
 ```
 > [!NOTE]  
-> Globals are used here for demonstration purposes only. Proper state management has many solutions, and the examples in this proposal are meant to be as minimal as possible. This porposal does not encourage global variables.
+> Globals are used here for demonstration purposes only. Proper state management has many solutions, and the examples in this proposal are meant to be as minimal as possible. This proposal does not encourage global variables.
 
 
 This has a number of problems...
