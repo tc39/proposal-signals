@@ -157,7 +157,7 @@ It turns out that existing Signal libraries are not all that different from each
     * Custom comparisons are possible for computed Signals as well as state Signals, to note when further computed Signals which depend on them should be updated.
 * Reactions to the condition where a computed Signal has one of its dependencies (or nested dependencies) become "dirty" and change, meaning that the Signal's value might be outdated.
     * This reaction is meant to schedule more significant work to be performed later.
-    * s are implemented in terms of these reactions, plus framework-level scheduling.
+    * Effects are implemented in terms of these reactions, plus framework-level scheduling.
     * Computed signals need the ability to react to whether they are registered as a (nested) dependency of one of these reactions.
 * Enable JS frameworks to do their own scheduling. No Promise-style built-in forced-on scheduling.
     * Synchronous reactions are needed to enable scheduling later work based on framework logic.
