@@ -1,5 +1,5 @@
 # 🚦 JavaScript Signals standard proposal🚦
-<img align=right src="signals-logo.png" alt="Signals logo" width=100>
+<img align=right src="Signals.svg" alt="Signals logo" width=100>
 
 Stage 1 ([explanation](https://tc39.es/process-document/))
 
@@ -45,6 +45,9 @@ const render = () => element.innerText = parity();
 // Simulate external updates to counter...
 setInterval(() => setCounter(counter + 1), 1000);
 ```
+> [!NOTE]  
+> Globals are used here for demonstration purposes only. Proper state management has many solutions, and the examples in this proposal are meant to be as minimal as possible. This proposal does not encourage global variables.
+
 
 This has a number of problems...
 
@@ -383,7 +386,7 @@ Walking through the different operations used here: The `notify` callback passed
 
 Calls to `notify` are ultimately triggered by a call to `.set()` on some state Signal. This call is synchronous: it happens before `.set` returns. But there's no need to worry about this callback observing the Signal graph in a half-processed state, because during a `notify` callback, no Signal can be read or written, even in an `untrack` call. Because `notify` is called during `.set()`, it is interrupting another thread of logic, which might not be complete. To read or write Signals from `notify`, schedule work to run later, e.g., by writing the Signal down in a list to later be accessed, or with `queueMicrotask` as above.
 
-Note that it is perfectly possible to use Signals effectively without `Symbol.subtle.Watcher` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
+Note that it is perfectly possible to use Signals effectively without `Signal.subtle.Watcher` by scheduling polling of computed Signals, as Glimmer does. However, many frameworks have found that it is very often useful to have this scheduling logic run synchronously, so the Signals API includes it.
 
 Both computed and state Signals are garbage-collected like any JS values. But Watchers have a special way of holding things alive: Any Signals which are watched by a Watcher will be held alive as long as any of the underlying states are reachable, as these may trigger a future `notify` call (and then a future `.get()`). For this reason, remember to call `Watcher.prototype.unwatch` to clean up effects.
 
@@ -442,8 +445,8 @@ Some aspects of the algorithm:
 
 Signal algorithms need to reference certain global state. This state is global for the entire thread, or "agent".
 
-- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` or `.run` call, or `undefined`. Initially `undefined`.
-- `notifying`: Boolean denoting whether there is an `notify` callback currently executing. Initially `false`.
+- `computing`: The innermost computed or effect Signal currently being reevaluated due to a `.get` or `.run` call, or `null`. Initially `null`.
+- `frozen`: Boolean denoting whether there is a callback currently executing which requires that the graph not be modified. Initially `false`.
 - `generation`: An incrementing integer, starting at 0, used to track how current a value is while avoiding circularities.
 
 ### The `Signal` namespace
@@ -462,33 +465,32 @@ Signal algorithms need to reference certain global state. This state is global f
 - `unwatched`: The callback to be called when the signal is no longer observed by an effect
 - `sinks`: Set of watched signals which depend on this one
 
-#### Constructor: `Signal(initialValue, options)`
+#### Constructor: `Signal.State(initialValue, options)`
 
 1. Set this Signal's `value` to `initialValue`.
 1. Set this Signal's `equals` to options?.equals
 1. Set this Signal's `watched` to options?.[Signal.subtle.watched]
 1. Set this Signal's `unwatched` to options?.[Signal.subtle.unwatched]
 1. Set this Signal's `sinks` to the empty set
-1. Set `state` to `~clean~`.
 
 #### Method: `Signal.State.prototype.get()`
 
-1. If `notifying` is true, throw an exception.
+1. If `frozen` is true, throw an exception.
 1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set.
 1. NOTE: We do not add `computing` to this Signal's `sinks` set until it is watched by a Watcher.
 1. Return this Signal's `value`.
 
 #### Method: `Signal.State.prototype.set(newValue)`
 
-1. If the current execution context is `notifying`, throw an exception.
+1. If the current execution context is `frozen`, throw an exception.
 1. Run the "set Signal value" algorithm with this Signal and the first parameter for the value.
 1. If that algorithm returned `~clean~`, then return undefined.
 1. Set the `state` of all `sinks` of this Signal to (if it is a Computed Signal) `~dirty~` if they were previously clean, or (if it is a Watcher) `~pending~` if it was previously `~watching~`.
 1. Set the `state` of all of the sinks' Computed Signal dependencies (recursively) to `~checked~` if they were previously `~clean~` (that is, leave dirty markings in place), or for Watchers, `~pending~` if previously `~watching~`.
 1. For each previously `~watching~` Watcher encountered in that recursive search, then in depth-first order,
-    1. Set `notifying` to true.
+    1. Set `frozen` to true.
     1. Calling their `notify` callback (saving aside any exception thrown, but ignoring the return value of `notify`).
-    1. Restore `notifying` to false.
+    1. Restore `frozen` to false.
     1. Set the `state` of the Watcher to `~waiting~`.
 1. If any exception was thrown from the `notify` callbacks, propagate it to the caller after all `notify` callbacks have run. If there are multiple exceptions, then package them up together into an AggregateError and throw that.
 1. Return undefined.
@@ -548,11 +550,11 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 #### Method: `Signal.Computed.prototype.get`
 
-1. If the current execution context is `notifying` or if this Signal has the state `~computing~`, or if this signal is a Watcher and `computing` a computed Signal, throw an exception.
-1. If `computing` is not `undefined`, add this Signal to `computing`'s `sources` set.
+1. If the current execution context is `frozen` or if this Signal has the state `~computing~`, or if this signal is a Watcher and `computing` a computed Signal, throw an exception.
+1. If `computing` is not `null`, add this Signal to `computing`'s `sources` set.
 1. NOTE: We do not add `computing` to this Signal's `sinks` set until/unless it becomes watched by a Watcher.
 1. If this Signal's state is `~dirty~` or `~checked~`: Repeat the following steps until this Signal is `~clean~`:
-    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is marked `~dirty~` (cutting off search when hitting a `~clean~` Signal, and including this Signal as the last thing to search).
+    1. Recurse up via `sources` to find the deepest, left-most (i.e. earliest observed) recursive source which is a Computed Signal marked `~dirty~` (cutting off search when hitting a `~clean~` Computed Signal, and including this Computed Signal as the last thing to search).
     1. Perform the "recalculate dirty computed Signal" algorithm on that Signal.
 1. At this point, this Signal's state will be `~clean~`, and no recursive sources will be `~dirty~` or `~checked~`. Return the Signal's `value`. If the value is an exception, rethrow that exception.
 
@@ -601,33 +603,47 @@ With [AsyncContext](https://github.com/tc39/proposal-async-context), the callbac
 
 #### Method: `Signal.subtle.Watcher.prototype.watch(...signals)`
 
+1. If `frozen` is true, throw an exception.
 1. If any of the arguments is not a signal, throw an exception.
 1. Append all arguments to the end of this object's `signals`.
-1. Add this watcher to each of the newly watched signals as a sink.
-1. Add this watcher as a `sink` to each Signal. If this was the first sink, then recurse up to sources to add that signal as a sink, and call the `watched` callback if it exists.
+1. For each newly-watched signal, in left-to-right order,
+    1. Add this watcher as a `sink` to that signal.
+    1. If this was the first sink, then recurse up to sources to add that signal as a sink.
+    1. Set `frozen` to true.
+    1. Call the `watched` callback if it exists.
+    1. Restore `frozen` to false.
 1. If the Signal's `state` is `~waiting~`, then set it to `~watching~`.
 
 #### Method: `Signal.subtle.Watcher.prototype.unwatch(...signals)`
 
+1. If `frozen` is true, throw an exception.
 1. If any of the arguments is not a signal, or is not being watched by this watcher, throw an exception.
-1. Remove each element from signals from this object's `signals`.
-1. Remove this Watcher from that Signal's `sink` set.
-1. If any Signal's `sink` set is now empty, then remove itself as a sink from each of its sources, and call the `unwatched` callback if it exists
+1. For each signal in the arguments, in left-to-right order,
+    1. Remove that signal from this Watcher's `signals` set.
+    1. Remove this Watcher from that Signal's `sink` set.
+    1. If that Signal's `sink` set has become empty, remove that Signal as a sink from each of its sources.
+    1. Set `frozen` to true.
+    1. Call the `unwatched` callback if it exists.
+    1. Restore `frozen` to false.
 1. If the watcher now has no `signals`, and its `state` is `~watching~`, then set it to `~waiting~`.
 
 #### Method: `Signal.subtle.Watcher.prototype.getPending()`
 
-1. Return an Array containing the subset of `signals` which are in the state `dirty` or `pending`.
+1. Return an Array containing the subset of `signals` which are Computed Signals in the states `~dirty~` or `~pending~`.
 
 ### Method: `Signal.subtle.untrack(cb)`
 
 1. Let `c` be the execution context's current `computing` state.
-1. Set `computing` to undefined.
+1. Set `computing` to null.
 1. Call `cb`.
 1. Restore `computing` to `c` (even if `cb` threw an exception).
 1. Return the return value of `cb` (rethrowing any exception).
 
-Note: untrack doesn't get you out of the `notifying` state, which is maintained strictly.
+Note: untrack doesn't get you out of the `frozen` state, which is maintained strictly.
+
+### Method: `Signal.subtle.currentComputed()`
+
+1. Return the current `computing` value.
 
 ### Common algorithms
 
@@ -637,7 +653,6 @@ Note: untrack doesn't get you out of the `notifying` state, which is maintained 
 1. Save the previous `computing` value and set `computing` to this Signal.
 1. Set this Signal's state to `~computing~`.
 1. Run this computed Signal's callback, using this Signal as the this value. Save the return value, and if the callback threw an exception, store that for rethrowing.
-1. Set this Signal's `recalculating` to false.
 1. Restore the previous `computing` value.
 1. Apply the "set Signal value" algorithm to the callback's return value.
 2. Set this Signal's state to `~clean~`.
