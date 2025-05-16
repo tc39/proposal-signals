@@ -717,13 +717,16 @@ const a = new Signal.State(0);
 const b = new Proxy(a, {
   get(target, property, receiver) {
     if (property === 'value') {
-      return target.get():
+      return target.get();
     }
+    return Reflect.get(target, property, receiver);
   }
   set(target, property, value, receiver) {
     if (property === 'value') {
       target.set(value)!
+      return true;
     }
+    return Reflect.set(target, property, value, receiver); 
   }
 });
 
