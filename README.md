@@ -1,3 +1,34 @@
+
+<div align="right">
+  <details>
+    <summary >🌐 Language</summary>
+    <div>
+      <div align="right">
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=en">English</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=zh-CN">简体中文</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=zh-TW">繁體中文</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=ja">日本語</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=ko">한국어</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=hi">हिन्दी</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=th">ไทย</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=fr">Français</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=de">Deutsch</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=es">Español</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=it">Itapano</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=ru">Русский</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=pt">Português</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=nl">Nederlands</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=pl">Polski</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=ar">العربية</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=fa">فارسی</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=tr">Türkçe</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=vi">Tiếng Việt</a></p>
+        <p><a href="https://openaitx.github.io/view.html?user=tc39&project=proposal-signals&lang=id">Bahasa Indonesia</a></p>
+      </div>
+    </div>
+  </details>
+</div>
+
 # 🚦 JavaScript Signals standard proposal🚦
 <img align=right src="Signals.svg" alt="Signals logo" width=100>
 
