@@ -740,7 +740,7 @@ when using a renderer that is optimized for fine-grained reactivity, clicking th
 
 See:
 - examples of nested reactive structures created with both Signals and Proxies: [signal-utils](https://github.com/NullVoxPopuli/signal-utils/tree/main/src)
-- example prior implementations showing the relationship between reactive data atd proxies: [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private)
+- example prior implementations showing the relationship between reactive data and proxies: [tracked-built-ins](https://github.com/tracked-tools/tracked-built-ins/tree/master/addon/src/-private)
 - [discussion](https://github.com/proposal-signals/proposal-signals/issues/101#issuecomment-2029802574).
 
 #### How do Signals work?
