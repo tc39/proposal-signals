@@ -812,3 +812,7 @@ See:
 **Q**: How will we prevent standardizing the wrong kind of Signals too soon, just like {{JS/web feature that you don't like}}?
 
 **A**: The authors of this proposal plan to go the extra mile with prototyping and proving things out prior to requesting stage advancement at TC39. See "Status and development plan" above. If you see gaps in this plan or opportunities for improvement, please file an issue explaining.
+
+## Contributing
+
+We invite all authors of reactive libraries to discussions in issues and [Discord](https://discord.gg/jt9TRqQ7).
