@@ -815,4 +815,4 @@ See:
 
 ## Contributing
 
-We invite all authors of reactive libraries to discussions in issues and [Discord](https://discord.gg/jt9TRqQ7).
+We invite all authors of reactive libraries to discussions in issues and [Discord](https://discord.gg/FdhpT5t3).
