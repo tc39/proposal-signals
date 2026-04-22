@@ -653,8 +653,8 @@ Note: untrack doesn't get you out of the `frozen` state, which is maintained str
 1. Save the previous `computing` value and set `computing` to this Signal.
 1. Set this Signal's state to `~computing~`.
 1. Run this computed Signal's callback, using this Signal as the this value. Save the return value, and if the callback threw an exception, store that for rethrowing.
-1. Restore the previous `computing` value.
 1. Apply the "set Signal value" algorithm to the callback's return value.
+1. Restore the previous `computing` value.
 2. Set this Signal's state to `~clean~`.
 1. If that algorithm returned `~dirty~`: mark all sinks of this Signal as `~dirty~` (previously, the sinks may have been a mix of checked and dirty). (Or, if this is unwatched, then adopt a new generation number to indicate dirtiness, or something like that.)
 1. Otherwise, that algorithm returned `~clean~`: In this case, for each `~checked~` sink of this Signal, if all of that Signal's sources are now clean, then mark that Signal as `~clean~` as well. Apply this cleanup step to further sinks recursively, to any newly clean Signals which have checked sinks. (Or, if this is unwatched, somehow indicate the same, so that the cleanup can proceed lazily.)
